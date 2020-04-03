@@ -1,0 +1,6 @@
+build/
+*.swp
+tags
+compile_commands.json
+.clangd/
+.ctags.d/
