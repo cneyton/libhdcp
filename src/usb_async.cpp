@@ -1,3 +1,4 @@
+#include <utility>
 #include "hdcp/exception.h"
 #include "usb_async.h"
 
@@ -114,12 +115,12 @@ void UsbAsync::write(const std::string& buf)
     }
 }
 
-void UsbAsync::write(const std::string&& buf)
+void UsbAsync::write(std::string&& buf)
 {
     if (!open_)
         throw hdcp::transport_error("not allowed to write when transport is closed");
 
-    write_queue_.push(std::move(buf));
+    write_queue_.push(std::forward<std::string>(buf));
     if (!wtransfer_.in_progress()) {
         fill_transfer(wtransfer_);
         wtransfer_.submit();

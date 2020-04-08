@@ -64,7 +64,7 @@ public:
     virtual void open();
     virtual void close();
     virtual void write(const std::string& buf);
-    virtual void write(const std::string&& buf);
+    virtual void write(std::string&& buf);
     virtual std::string read();
 
 private:

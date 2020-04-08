@@ -14,7 +14,7 @@ public:
     virtual void open()  = 0;
     virtual void close() = 0;
     virtual void write(const std::string& buf)  = 0;
-    virtual void write(const std::string&& buf) = 0;
+    virtual void write(std::string&& buf) = 0;
     virtual std::string read()  = 0;
     bool is_open() const {return open_;};
 
