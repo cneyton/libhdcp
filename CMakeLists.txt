@@ -18,6 +18,7 @@ add_subdirectory(dependencies)
 target_include_directories(hdcp
     PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src      # to remove
     )
 
 target_link_libraries(hdcp PUBLIC common usb-1.0)
