@@ -3,6 +3,8 @@
 #include <stdexcept>
 #include <libusb-1.0/libusb.h>
 
+#include "common/log.h"
+
 namespace hdcp
 {
 
@@ -22,6 +24,18 @@ class transport_error: public std::runtime_error
 {
 public:
     transport_error(const std::string& what_arg): std::runtime_error(what_arg) {}
+};
+
+class application_error: public std::runtime_error
+{
+public:
+    application_error(const std::string& what_arg): std::runtime_error(what_arg) {}
+};
+
+class packet_error: public std::runtime_error
+{
+public:
+    packet_error(const std::string& what_arg): std::runtime_error(what_arg) {}
 };
 
 } /* namespace hdcp */
