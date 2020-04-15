@@ -25,9 +25,13 @@ void RequestManager::send_command(Packet::BlockType type, const std::string& dat
     }
 }
 
-void RequestManager::manage_hip(std::chrono::milliseconds timeout)
+void RequestManager::send_hip(const Identification& host_id, std::chrono::milliseconds timeout)
 {
     dip_timeout_flag_ = false;
+    // send hip
+    Packet hip = Packet::make_hip(++packet_id_, host_id);
+    transport_.write(hip.get_data());
+    // set timeout
     dip_id_ = timeout_queue_.add(now_, timeout.count()/time_base_ms_,
                                  std::bind(&RequestManager::dip_timeout_cb, this,
                                            std::placeholders::_1, std::placeholders::_2));

@@ -66,7 +66,7 @@ public:
 
     void send_command(Packet::BlockType type, const std::string& data,
                       Request::Callback request_cb, std::chrono::milliseconds timeout);
-    void manage_hip(std::chrono::milliseconds timeout);
+    void send_hip(const Identification& host_id, std::chrono::milliseconds timeout);
     void start_keepalive_management(std::chrono::milliseconds keepalive_interval,
                                     std::chrono::milliseconds keepalive_timeout);
     void stop_keepalive_management();
