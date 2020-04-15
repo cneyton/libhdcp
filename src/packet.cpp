@@ -5,7 +5,7 @@
 
 using namespace hdcp;
 
-Packet::Packet(std::string& buf): data_(buf)
+Packet::Packet(const std::string& buf): data_(buf)
 {
     validate_packet();
 }
@@ -15,7 +15,7 @@ Packet::Packet(std::string&& buf): data_(std::forward<std::string>(buf))
     validate_packet();
 }
 
-Packet::Packet(Packet& other): data_(other.data_)
+Packet::Packet(const Packet& other): data_(other.data_)
 {
 }
 

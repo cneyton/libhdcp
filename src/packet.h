@@ -35,9 +35,9 @@ public:
         data    = 0x44, // data
     };
 
-    Packet(std::string&);
+    Packet(const std::string&);
     Packet(std::string&&);
-    Packet(Packet&);
+    Packet(const Packet&);
     Packet(Packet&&);
     virtual ~Packet();
 
