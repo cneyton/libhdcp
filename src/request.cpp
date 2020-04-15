@@ -4,7 +4,7 @@
 
 using namespace hdcp;
 
-void RequestManager::send_command(Packet::BlockType type, std::string& data,
+void RequestManager::send_command(Packet::BlockType type, const std::string& data,
                                   Request::Callback request_cb, std::chrono::milliseconds timeout)
 {
     common::TimeoutQueue::Id id =

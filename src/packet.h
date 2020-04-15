@@ -48,9 +48,9 @@ public:
     std::vector<Block> get_blocks() const;
     const std::string& get_data() const {return data_;};
 
-    static Packet make_command(Id, BlockType, std::string&);
+    static Packet make_command(Id, BlockType, const std::string&);
     static Packet make_keepalive(Id id);
-    static Packet make_hip(Id id, hdcp::Identification);
+    static Packet make_hip(Id id, const hdcp::Identification& host_id);
 
 private:
     using Crc = uint16_t;
@@ -88,8 +88,8 @@ private:
     Crc compute_hcrc() const;
     Crc compute_pcrc() const;
 
-    static std::string make_header(Id id, Type type, uint8_t n_block, std::string& payload);
-    static std::string make_block(BlockType type, std::string& data);
+    static std::string make_header(Id id, Type type, uint8_t n_block, const std::string& payload);
+    static std::string make_block(BlockType type, const std::string& data);
 
     std::string data_;
 

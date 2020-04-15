@@ -64,7 +64,7 @@ public:
         Log(logger), transport_(transport) {}
     virtual ~RequestManager() {}
 
-    void send_command(Packet::BlockType type, std::string& data,
+    void send_command(Packet::BlockType type, const std::string& data,
                       Request::Callback request_cb, std::chrono::milliseconds timeout);
     void manage_hip(std::chrono::milliseconds timeout);
     void start_keepalive_management(std::chrono::milliseconds keepalive_interval,

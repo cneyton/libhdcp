@@ -27,7 +27,7 @@ Packet::~Packet()
 {
 }
 
-Packet Packet::make_command(Id id, BlockType type, std::string& data)
+Packet Packet::make_command(Id id, BlockType type, const std::string& data)
 {
     std::string payload(Packet::make_block(type, data));
     std::string header(Packet::make_header(id, Packet::Type::cmd, 1, payload));
@@ -41,7 +41,7 @@ Packet Packet::make_keepalive(Id id)
     return Packet(header + payload);
 }
 
-Packet Packet::make_hip(Id id, hdcp::Identification host_id)
+Packet Packet::make_hip(Id id, const hdcp::Identification& host_id)
 {
     std::string payload;
     payload += Packet::make_block(name, host_id.name);
@@ -75,7 +75,7 @@ Packet::Crc Packet::compute_pcrc() const
     return compute_crc(get_payload());
 }
 
-std::string Packet::make_header(Id id, Type type, uint8_t n_block, std::string& payload)
+std::string Packet::make_header(Id id, Type type, uint8_t n_block, const std::string& payload)
 {
     Header h = {
         .sop  = sop,
@@ -94,7 +94,7 @@ std::string Packet::make_header(Id id, Type type, uint8_t n_block, std::string& 
     return std::string(it, it + sizeof(h));
 }
 
-std::string Packet::make_block(BlockType type, std::string& data)
+std::string Packet::make_block(BlockType type, const std::string& data)
 {
     char * it = reinterpret_cast<char*>(&type);
     std::string type_str(it, it + sizeof(type));
