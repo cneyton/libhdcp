@@ -66,15 +66,17 @@ public:
 
     void send_command(Packet::BlockType type, std::string& data,
                       Request::Callback request_cb, std::chrono::milliseconds timeout);
-
+    void manage_hip(std::chrono::milliseconds timeout);
     void start_keepalive_management(std::chrono::milliseconds keepalive_interval,
                                     std::chrono::milliseconds keepalive_timeout);
     void stop_keepalive_management();
 
     void ack_command(Packet& packet);
+    void ack_dip();
     void ack_keepalive();
 
     bool keepalive_timeout() const {return ka_timeout_flag_;}
+    bool dip_timeout()       const {return dip_timeout_flag_;}
 
 private:
     static const int64_t time_base_ms_ = 100;
@@ -104,7 +106,9 @@ private:
     common::TimeoutQueue     timeout_queue_;
     common::TimeoutQueue::Id keepalive_id_;
     common::TimeoutQueue::Id keepalive_mngt_id_;
-    std::atomic_bool ka_timeout_flag_ = false;
+    common::TimeoutQueue::Id dip_id_;
+    std::atomic_bool ka_timeout_flag_  = false;
+    std::atomic_bool dip_timeout_flag_ = false;
 
     Transport& transport_;
 
@@ -115,6 +119,7 @@ private:
 
     void cmd_timeout_cb(common::TimeoutQueue::Id id, int64_t now);
     void ka_timeout_cb(common::TimeoutQueue::Id id, int64_t now);
+    void dip_timeout_cb(common::TimeoutQueue::Id id, int64_t now);
 
     virtual void run();
 };

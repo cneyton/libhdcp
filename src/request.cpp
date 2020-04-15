@@ -9,8 +9,8 @@ void RequestManager::send_command(Packet::BlockType type, std::string& data,
 {
     common::TimeoutQueue::Id id =
         timeout_queue_.add_repeating(now_, timeout.count()/time_base_ms_,
-                           std::bind(&RequestManager::cmd_timeout_cb, this,
-                                     std::placeholders::_1, std::placeholders::_2));
+                                     std::bind(&RequestManager::cmd_timeout_cb, this,
+                                               std::placeholders::_1, std::placeholders::_2));
 
     // send command
     Packet cmd = Packet::make_command(++packet_id_, type, data);
@@ -25,10 +25,18 @@ void RequestManager::send_command(Packet::BlockType type, std::string& data,
     }
 }
 
+void RequestManager::manage_hip(std::chrono::milliseconds timeout)
+{
+    dip_timeout_flag_ = false;
+    dip_id_ = timeout_queue_.add(now_, timeout.count()/time_base_ms_,
+                                 std::bind(&RequestManager::dip_timeout_cb, this,
+                                           std::placeholders::_1, std::placeholders::_2));
+}
+
 void RequestManager::start_keepalive_management(std::chrono::milliseconds keepalive_interval,
                                 std::chrono::milliseconds keepalive_timeout)
 {
-    timeout_keepalive_ = keepalive_timeout.count()/time_base_ms_;
+    ka_timeout_flag_ = false;
     keepalive_mngt_id_ =
         timeout_queue_.add_repeating(now_, keepalive_interval.count()/time_base_ms_,
                                      std::bind(&RequestManager::ka_mngt_timeout_cb, this,
@@ -36,8 +44,11 @@ void RequestManager::start_keepalive_management(std::chrono::milliseconds keepal
     // send keepalive
     Packet ka = Packet::make_keepalive(++packet_id_);
     transport_.write(ka.get_data());
-
-    ka_timeout_flag_ = false;
+    // set timeout
+    timeout_keepalive_ = keepalive_timeout.count()/time_base_ms_;
+    keepalive_id_ = timeout_queue_.add(now_, timeout_keepalive_,
+                                       std::bind(&RequestManager::ka_timeout_cb, this,
+                                                 std::placeholders::_1, std::placeholders::_2));
 }
 
 void RequestManager::stop_keepalive_management()
@@ -67,6 +78,11 @@ void RequestManager::ack_keepalive()
     timeout_queue_.erase(keepalive_id_);
 }
 
+void RequestManager::ack_dip()
+{
+    timeout_queue_.erase(dip_id_);
+}
+
 void RequestManager::cmd_timeout_cb(common::TimeoutQueue::Id id, int64_t now)
 {
     std::unique_lock<std::mutex> lk(requests_mutex_);
@@ -92,6 +108,11 @@ void RequestManager::cmd_timeout_cb(common::TimeoutQueue::Id id, int64_t now)
 void RequestManager::ka_timeout_cb(common::TimeoutQueue::Id id, int64_t now)
 {
     ka_timeout_flag_ = true;
+}
+
+void RequestManager::dip_timeout_cb(common::TimeoutQueue::Id id, int64_t now)
+{
+    dip_timeout_flag_ = true;
 }
 
 void RequestManager::ka_mngt_timeout_cb(common::TimeoutQueue::Id id, int64_t now)
