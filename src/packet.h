@@ -37,6 +37,8 @@ public:
 
     Packet(std::string&);
     Packet(std::string&&);
+    Packet(Packet&);
+    Packet(Packet&&);
     virtual ~Packet();
 
     Id      get_id()       const {return get_header()->id;};

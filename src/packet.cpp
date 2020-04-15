@@ -15,6 +15,14 @@ Packet::Packet(std::string&& buf): data_(std::forward<std::string>(buf))
     validate_packet();
 }
 
+Packet::Packet(Packet& other): data_(other.data_)
+{
+}
+
+Packet::Packet(Packet&& other): data_(std::move(other.data_))
+{
+}
+
 Packet::~Packet()
 {
 }
