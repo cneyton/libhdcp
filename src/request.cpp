@@ -120,11 +120,13 @@ void RequestManager::cmd_timeout_cb(common::TimeoutQueue::Id id, int64_t now)
 
 void RequestManager::ka_timeout_cb(common::TimeoutQueue::Id id, int64_t now)
 {
+    log_warn(logger_, "keeaplive timeout");
     ka_timeout_flag_ = true;
 }
 
 void RequestManager::dip_timeout_cb(common::TimeoutQueue::Id id, int64_t now)
 {
+    log_warn(logger_, "dip timeout");
     dip_timeout_flag_ = true;
 }
 

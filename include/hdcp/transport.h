@@ -3,6 +3,9 @@
 
 #include <string>
 
+namespace hdcp
+{
+
 constexpr std::size_t max_transfer_size = 2048;
 constexpr uint timeout_read  = 4000;
 constexpr uint timeout_write = 4000;
@@ -21,5 +24,7 @@ public:
 protected:
     bool open_ = false;
 };
+
+} /* namespace hdcp */
 
 #endif /* TRANSPORT_H */

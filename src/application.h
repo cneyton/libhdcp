@@ -33,6 +33,7 @@ public:
     const Identification& get_device_id() const {return device_id_;}
 
     void send_command(Packet::BlockType id, const std::string& data, Request::Callback cb);
+    void  reconnect();
 
 private:
     int handler_state_disconnected_();
@@ -64,6 +65,9 @@ private:
     std::atomic_bool dip_received_            = false;
     std::atomic_bool disconnection_requested_ = false;
 
+    std::mutex              mutex_connection_;
+    std::condition_variable cv_connection_;
+
     common::Statemachine<State>    statemachine_;
     Transport*                     transport_;
     RequestManager                 request_manager_;
@@ -71,6 +75,7 @@ private:
     Identification                 device_id_;
 
     virtual void run();
+    void wait_connection_request();
 };
 
 } /* namespace hdcp */

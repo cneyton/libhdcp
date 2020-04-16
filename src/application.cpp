@@ -9,6 +9,17 @@ Application::Application(common::Logger logger, Transport* transport, const Iden
     transport_(transport), request_manager_(logger, transport),
     host_id_(host_id)
 {
+    statemachine_.display_trace();
+}
+
+Application::~Application()
+{
+    disconnection_requested_ = true;
+    statemachine_.wait(State::disconnected);
+    if (statemachine_.get_nb_loop_in_current_state() > 1)
+        stop();
+    if (joinable())
+        join();
 }
 
 void Application::send_command(Packet::BlockType id, const std::string& data, Request::Callback cb)
@@ -19,6 +30,13 @@ void Application::send_command(Packet::BlockType id, const std::string& data, Re
         throw hdcp::application_error("can't send command while disconnected");
 }
 
+void Application::reconnect()
+{
+    std::unique_lock<std::mutex> lk(mutex_connection_);
+    connection_requested_ = true;
+    cv_connection_.notify_all();
+}
+
 int Application::handler_state_disconnected_()
 {
     if (statemachine_.get_nb_loop_in_current_state() == 1) {
@@ -27,7 +45,9 @@ int Application::handler_state_disconnected_()
         if (request_manager_.joinable())
             request_manager_.join();
     }
-    return common::statemachine::goto_next_state;
+
+    wait_connection_request();
+    return 0;
 }
 
 int Application::handler_state_connecting_()
@@ -53,7 +73,7 @@ int Application::handler_state_connecting_()
         break;
     }
 
-    return common::statemachine::goto_next_state;
+    return 0;
 }
 
 int Application::handler_state_connected_()
@@ -78,11 +98,12 @@ int Application::handler_state_connected_()
         request_manager_.ack_keepalive();
         break;
     default:
-        log_warn(logger_, "you should not be here");
+        log_warn(logger_,
+                 "you should not receive this packet type ({:#x}) while connected", p.get_type());
         break;
     }
 
-    return common::statemachine::goto_next_state;
+    return 0;
 }
 
 int Application::check_connection_requested_()
@@ -108,7 +129,19 @@ int Application::check_disconnected_()
 
 void Application::run()
 {
+    connection_requested_ = true;
     while (is_running()) {
-        statemachine_.wakeup();
+        try {
+            statemachine_.wakeup();
+        } catch (hdcp::packet_error& e) {
+            log_warn(logger_, e.what());
+        }
     }
 }
+
+void Application::wait_connection_request()
+{
+    std::unique_lock<std::mutex> lk(mutex_connection_);
+    cv_connection_.wait(lk, [&]{return connection_requested_ ? true:false;});
+}
+
