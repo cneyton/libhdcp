@@ -14,11 +14,13 @@ namespace hdcp
 
 constexpr std::chrono::milliseconds connecting_timeout_(1000);
 constexpr std::chrono::milliseconds command_timeout_(1000);
+constexpr std::chrono::milliseconds keepalive_timeout(1000);
+constexpr std::chrono::milliseconds keepalive_interval(3000);
 
 class Application: public common::Log, public common::Thread
 {
 public:
-    Application(common::Logger logger, Transport& transport, const Identification& host_id);
+    Application(common::Logger logger, Transport* transport, const Identification& host_id);
     virtual ~Application();
 
     enum class State {
@@ -33,7 +35,6 @@ public:
     void send_command(Packet::BlockType id, const std::string& data, Request::Callback cb);
 
 private:
-
     int handler_state_disconnected_();
     int handler_state_connecting_();
     int handler_state_connected_();
@@ -64,7 +65,7 @@ private:
     std::atomic_bool disconnection_requested_ = false;
 
     common::Statemachine<State>    statemachine_;
-    Transport&                     transport_;
+    Transport*                     transport_;
     RequestManager                 request_manager_;
     Identification                 host_id_;
     Identification                 device_id_;

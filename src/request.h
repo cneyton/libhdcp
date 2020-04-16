@@ -60,7 +60,7 @@ private:
 class RequestManager: public common::Log, public common::Thread
 {
 public:
-    RequestManager(common::Log logger, Transport& transport):
+    RequestManager(common::Log logger, Transport* transport):
         Log(logger), transport_(transport) {}
     virtual ~RequestManager() {}
 
@@ -110,7 +110,7 @@ private:
     std::atomic_bool ka_timeout_flag_  = false;
     std::atomic_bool dip_timeout_flag_ = false;
 
-    Transport& transport_;
+    Transport* transport_;
 
     /*
      * This cb resend a keep-alive every timeout_keepalive
@@ -122,6 +122,7 @@ private:
     void dip_timeout_cb(common::TimeoutQueue::Id id, int64_t now);
 
     virtual void run();
+    void clear();
 };
 
 } /* namespace hdcp */

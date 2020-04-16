@@ -1,12 +1,14 @@
 #include "request.h"
 #include "hdcp/exception.h"
-#include <mutex>
 
 using namespace hdcp;
 
 void RequestManager::send_command(Packet::BlockType type, const std::string& data,
                                   Request::Callback request_cb, std::chrono::milliseconds timeout)
 {
+    if (!transport_)
+        throw hdcp::application_error("transport null pointer");
+
     common::TimeoutQueue::Id id =
         timeout_queue_.add_repeating(now_, timeout.count()/time_base_ms_,
                                      std::bind(&RequestManager::cmd_timeout_cb, this,
@@ -14,7 +16,7 @@ void RequestManager::send_command(Packet::BlockType type, const std::string& dat
 
     // send command
     Packet cmd = Packet::make_command(++packet_id_, type, data);
-    transport_.write(cmd.get_data());
+    transport_->write(cmd.get_data());
 
     // add request to the set
     {
@@ -27,10 +29,12 @@ void RequestManager::send_command(Packet::BlockType type, const std::string& dat
 
 void RequestManager::send_hip(const Identification& host_id, std::chrono::milliseconds timeout)
 {
+    if (!transport_)
+        throw hdcp::application_error("transport null pointer");
     dip_timeout_flag_ = false;
     // send hip
     Packet hip = Packet::make_hip(++packet_id_, host_id);
-    transport_.write(hip.get_data());
+    transport_->write(hip.get_data());
     // set timeout
     dip_id_ = timeout_queue_.add(now_, timeout.count()/time_base_ms_,
                                  std::bind(&RequestManager::dip_timeout_cb, this,
@@ -40,6 +44,8 @@ void RequestManager::send_hip(const Identification& host_id, std::chrono::millis
 void RequestManager::start_keepalive_management(std::chrono::milliseconds keepalive_interval,
                                 std::chrono::milliseconds keepalive_timeout)
 {
+    if (!transport_)
+        throw hdcp::application_error("transport null pointer");
     ka_timeout_flag_ = false;
     keepalive_mngt_id_ =
         timeout_queue_.add_repeating(now_, keepalive_interval.count()/time_base_ms_,
@@ -47,7 +53,7 @@ void RequestManager::start_keepalive_management(std::chrono::milliseconds keepal
                                                std::placeholders::_1, std::placeholders::_2));
     // send keepalive
     Packet ka = Packet::make_keepalive(++packet_id_);
-    transport_.write(ka.get_data());
+    transport_->write(ka.get_data());
     // set timeout
     timeout_keepalive_ = keepalive_timeout.count()/time_base_ms_;
     keepalive_id_ = timeout_queue_.add(now_, timeout_keepalive_,
@@ -96,11 +102,14 @@ void RequestManager::cmd_timeout_cb(common::TimeoutQueue::Id id, int64_t now)
         throw hdcp::application_error("request id not found, you should not be here");
 
     if (search->get_retry() <= max_retry_) {
-        log_warn(logger_, "");
+        log_warn(logger_, "command {} timeout, try = {}", search->get_command().get_id(),
+                 search->get_retry());
         set_by_request.modify(search, std::bind(&Request::inc_retry, *search));
-        transport_.write(search->get_command().get_data());
+        if (!transport_)
+            throw hdcp::application_error("transport null pointer");
+        transport_->write(search->get_command().get_data());
     } else {
-        log_error(logger_, "");
+        log_error(logger_, "command {} failed", search->get_command().get_id());
         Request r(*search);
         r.set_status(Request::Status::timeout);
         r.call_callback();
@@ -121,9 +130,11 @@ void RequestManager::dip_timeout_cb(common::TimeoutQueue::Id id, int64_t now)
 
 void RequestManager::ka_mngt_timeout_cb(common::TimeoutQueue::Id id, int64_t now)
 {
+    if (!transport_)
+        throw hdcp::application_error("transport null pointer");
     // send keepalive
     Packet ka = Packet::make_keepalive(++packet_id_);
-    transport_.write(ka.get_data());
+    transport_->write(ka.get_data());
     keepalive_id_ = timeout_queue_.add(now_, timeout_keepalive_,
                                        std::bind(&RequestManager::ka_timeout_cb, this,
                                                  std::placeholders::_1, std::placeholders::_2));
@@ -131,10 +142,25 @@ void RequestManager::ka_mngt_timeout_cb(common::TimeoutQueue::Id id, int64_t now
 
 void RequestManager::run()
 {
-    now_ = 0;
-    packet_id_ = 0;
+    clear();
+    notify_running(0);
     while (is_running()) {
         timeout_queue_.run_once(now_++);
         std::this_thread::sleep_for(std::chrono::milliseconds(time_base_ms_));
     }
+    stop_keepalive_management();
+    clear();
+}
+
+void RequestManager::clear()
+{
+    {
+        std::unique_lock<std::mutex> lk(requests_mutex_);
+        requests_.clear();
+    }
+    timeout_queue_.clear();
+    now_              = 0;
+    packet_id_        = 0;
+    ka_timeout_flag_  = false;
+    dip_timeout_flag_ = false;
 }
