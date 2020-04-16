@@ -50,7 +50,9 @@ public:
 
     static Packet make_command(Id, BlockType, const std::string&);
     static Packet make_keepalive(Id id);
+    static Packet make_keepalive_ack(Id id);
     static Packet make_hip(Id id, const hdcp::Identification& host_id);
+    static Packet make_dip(Id id, const hdcp::Identification& dev_id);
 
 private:
     using Crc = uint16_t;
