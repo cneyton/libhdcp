@@ -23,6 +23,14 @@ Packet::Packet(Packet&& other): data_(std::move(other.data_))
 {
 }
 
+Packet& Packet::operator=(const Packet& p)
+{
+    if (this == &p)
+        return *this;
+    data_ = p.get_data();
+    return *this;
+}
+
 Packet::~Packet()
 {
 }

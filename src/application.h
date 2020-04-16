@@ -33,7 +33,7 @@ public:
     const Identification& get_device_id() const {return device_id_;}
 
     void send_command(Packet::BlockType id, const std::string& data, Request::Callback cb);
-    void  reconnect();
+    void reconnect();
 
 private:
     int handler_state_disconnected_();
