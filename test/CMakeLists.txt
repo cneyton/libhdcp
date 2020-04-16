@@ -1,5 +1,6 @@
 set(files
     packet_test.cpp
+    application_test.cpp
     )
 
 foreach(file ${files})
