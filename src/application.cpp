@@ -61,8 +61,11 @@ int Application::handler_state_connecting_()
     if (!transport_)
         throw hdcp::application_error("transport null pointer");
 
-    Packet p(transport_->read());
+    std::string buf;
+    if (!transport_->read(buf))
+        return 0;
 
+    Packet p(std::move(buf));
     switch (p.get_type()) {
     case Packet::Type::dip:
         dip_received_ = true;
@@ -86,8 +89,11 @@ int Application::handler_state_connected_()
     if (!transport_)
         throw hdcp::application_error("transport null pointer");
 
-    Packet p(transport_->read());
+    std::string buf;
+    if (!transport_->read(buf))
+        return 0;
 
+    Packet p(std::move(buf));
     switch (p.get_type()) {
     case Packet::Type::cmd_ack:
         request_manager_.ack_command(p);

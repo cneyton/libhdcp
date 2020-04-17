@@ -13,18 +13,6 @@ public:
     TransportTest() {};
     virtual ~TransportTest() {};
 
-    virtual void open()
-    {
-        std::cout << "open\n";
-        open_ = true;
-    }
-
-    virtual void close()
-    {
-        std::cout << "close" << std::endl;
-        open_ = false;
-    }
-
     virtual void write(const std::string& buf)
     {
         std::cout << "write1: " << buf << std::endl;
@@ -35,11 +23,22 @@ public:
         std::cout << "write1: " << buf << std::endl;
     }
 
-    virtual std::string read()
+    virtual bool read(std::string& buf)
     {
         Identification dev_id("dev", "00001", "0.1.01", "0.1.02");
         Packet dip = Packet::make_dip(1, dev_id);
-        return dip.get_data();
+        buf = dip.get_data();
+        return true;
+    }
+
+    virtual void start()
+    {
+        std::cout << "start" << std::endl;
+    }
+
+    virtual void stop()
+    {
+        std::cout << "stop" << std::endl;
     }
 };
 

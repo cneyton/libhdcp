@@ -1,13 +1,15 @@
-#ifndef USB_ASYNC_H
-#define USB_ASYNC_H
+#pragma once
 
-#include <memory>
-#include <queue>
 #include <libusb-1.0/libusb.h>
 
 #include "common/log.h"
+#include "common/readerwriterqueue.h"
+#include "common/thread.h"
 
-#include "transport.h"
+#include "hdcp/transport.h"
+
+namespace hdcp
+{
 
 class Transfer
 {
@@ -25,35 +27,30 @@ private:
 class RTransfer: public Transfer
 {
 public:
-    RTransfer();
+    RTransfer(libusb_device_handle * device_handle);
     virtual ~RTransfer();
 
-    void      free_buffer(libusb_device_handle * device_handle);
-    void      alloc_buffer(libusb_device_handle * device_handle);
     uint8_t * get_buffer() const {return buf_;};
 
 private:
     uint8_t * buf_ = nullptr;
+    libusb_device_handle * device_handle_ = nullptr;
 };
 
 class WTransfer: public Transfer
 {
 public:
     virtual void submit();
-    void resubmit();
 
     bool in_progress() const {return in_progress_;};
     void put_on_hold()       {in_progress_ = false;};
 
-    int  n_retry() const     {return retry_;};
-
 private:
-    bool in_progress_ = false;
-    int  retry_       = 0;
+    std::atomic_bool in_progress_ = false;
 };
 
 
-class UsbAsync: public common::Log, public Transport
+class UsbAsync: public common::Log, public common::Thread, public Transport
 {
 public:
     UsbAsync(common::Logger logger, int itfc_nb,
@@ -61,11 +58,11 @@ public:
              uint8_t in_endoint, uint8_t out_endpoint);
     virtual ~UsbAsync();
 
-    virtual void open();
-    virtual void close();
     virtual void write(const std::string& buf);
     virtual void write(std::string&& buf);
-    virtual std::string read();
+    virtual bool read(std::string& buf);
+    virtual void stop();
+    virtual void start();
 
 private:
     libusb_context       * ctx_ = nullptr;
@@ -77,16 +74,22 @@ private:
     uint8_t  in_endoint_;
     uint8_t  out_endpoit_;
 
-    std::queue<std::string> write_queue_;
-    std::queue<std::string> read_queue_;
-    RTransfer               rtransfer_curr_;
-    RTransfer               rtransfer_prev_;
-    WTransfer               wtransfer_;
+    common::ReaderWriterQueue<std::string>         write_queue_;
+    common::BlockingReaderWriterQueue<std::string> read_queue_;
 
-    void fill_transfer(WTransfer& transfer);
+    RTransfer * rtransfer_curr_ = nullptr;
+    RTransfer * rtransfer_prev_ = nullptr;
+    WTransfer * wtransfer_      = nullptr;
+
+    void fill_transfer(WTransfer& transfer, std::string&& buf);
     void fill_transfer(RTransfer& transfer);
     static void write_cb(libusb_transfer * transfer);
     static void read_cb(libusb_transfer * transfer);
+
+    void open();
+    void close();
+
+    virtual void run();
 };
 
-#endif /* USB_ASYNC_H */
+} /* namespace hdcp */

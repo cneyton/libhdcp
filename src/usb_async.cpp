@@ -1,8 +1,9 @@
-#include <utility>
 #include "hdcp/exception.h"
 #include "usb_async.h"
 
-constexpr int   kernel_auto_detach_driver = 1;
+using namespace hdcp;
+
+constexpr int kernel_auto_detach_driver = 1;
 
 Transfer::Transfer()
 {
@@ -23,36 +24,25 @@ void Transfer::submit()
         throw hdcp::libusb_error(ret);
 }
 
-void WTransfer::submit()
+RTransfer::RTransfer(libusb_device_handle * device_handle): device_handle_(device_handle)
 {
-    Transfer::submit();
-    in_progress_ = true;
-    retry_ = 0;
-}
+    if (!device_handle)
+        throw::transport_error("device handle nullptr");
 
-void WTransfer::resubmit()
-{
-    Transfer::submit();
-    in_progress_ = true;
-    retry_++;
-}
-
-void RTransfer::free_buffer(libusb_device_handle * device_handle)
-{
-    int ret;
-    if (buf_ && device_handle) {
-        if ((ret = libusb_dev_mem_free(device_handle, buf_, max_transfer_size)) < 0)
-            throw hdcp::libusb_error(ret);
-    }
-}
-
-void RTransfer::alloc_buffer(libusb_device_handle * device_handle)
-{
     if (!(buf_ = libusb_dev_mem_alloc(device_handle, max_transfer_size)))
         throw std::bad_alloc();
 }
 
+RTransfer::~RTransfer()
+{
+    libusb_dev_mem_free(device_handle_, buf_, max_transfer_size);
+}
 
+void WTransfer::submit()
+{
+    Transfer::submit();
+    in_progress_ = true;
+}
 
 UsbAsync::UsbAsync(common::Logger logger, int itfc_nb,
                    uint16_t vendor_id, uint16_t product_id,
@@ -67,15 +57,14 @@ UsbAsync::UsbAsync(common::Logger logger, int itfc_nb,
 
 UsbAsync::~UsbAsync()
 {
-    if (open_)
-        close();
+    stop();
     libusb_exit(ctx_);
 }
 
 void UsbAsync::open()
 {
     if (!(device_handle_ = libusb_open_device_with_vid_pid(ctx_, vendor_id_, product_id_)))
-        throw hdcp::device_error("device not found");
+        throw hdcp::transport_error("device not found");
 
     libusb_set_auto_detach_kernel_driver(device_handle_, kernel_auto_detach_driver);
 
@@ -83,63 +72,59 @@ void UsbAsync::open()
     if ((ret = libusb_claim_interface(device_handle_, itfc_nb_)) < 0)
         throw hdcp::libusb_error(ret);
 
-    fill_transfer(rtransfer_curr_);
-    fill_transfer(rtransfer_prev_);
-
-    open_ = true;
+    wtransfer_      = new WTransfer();
+    rtransfer_curr_ = new RTransfer(device_handle_);
+    rtransfer_prev_ = new RTransfer(device_handle_);
+    fill_transfer(*rtransfer_curr_);
+    fill_transfer(*rtransfer_prev_);
 }
 
 void UsbAsync::close()
 {
-    if (!open_)
-        return;
-
-    /* TODO: clear read & write queue  <07-04-20, cneyton> */
-    rtransfer_curr_.free_buffer(device_handle_);
-    rtransfer_prev_.free_buffer(device_handle_);
+    // empty queues
+    while (read_queue_.pop()) {}
+    while (write_queue_.pop()) {}
+    // delete transfers
+    delete wtransfer_;
+    delete rtransfer_curr_;
+    delete rtransfer_prev_;
+    wtransfer_      = nullptr;
+    rtransfer_curr_ = nullptr;
+    rtransfer_prev_ = nullptr;
+    // close
     libusb_close(device_handle_);
     device_handle_ = nullptr;
-
-    open_ = false;
 }
 
 void UsbAsync::write(const std::string& buf)
 {
-    if (!open_)
-        throw hdcp::transport_error("not allowed to write when transport is closed");
-
-    write_queue_.push(buf);
-    if (!wtransfer_.in_progress()) {
-        fill_transfer(wtransfer_);
-        wtransfer_.submit();
-    }
+    write(std::string(buf));
 }
 
 void UsbAsync::write(std::string&& buf)
 {
-    if (!open_)
-        throw hdcp::transport_error("not allowed to write when transport is closed");
+    if (!is_running())
+        throw hdcp::transport_error("not allowed to write when transport is stopped");
 
-    write_queue_.push(std::forward<std::string>(buf));
-    if (!wtransfer_.in_progress()) {
-        fill_transfer(wtransfer_);
-        wtransfer_.submit();
+    if (wtransfer_->in_progress()) {
+        if (write_queue_.try_enqueue(std::forward<std::string>(buf)))
+            throw hdcp::transport_error("write queue full");
+    } else {
+        fill_transfer(*wtransfer_, std::forward<std::string>(buf));
+        wtransfer_->submit();
     }
 }
 
-std::string UsbAsync::read()
+bool UsbAsync::read(std::string& buf)
 {
-    if (!open_)
-        throw hdcp::transport_error("not allowed to read  when transport is closed");
+    if (!is_running())
+        throw hdcp::transport_error("not allowed to read when transport is stopped");
 
-    auto front = read_queue_.front();
-    read_queue_.pop();
-    return front;
+    return read_queue_.wait_dequeue_timed(buf, time_base_ms);
 }
 
-void UsbAsync::fill_transfer(WTransfer& transfer)
+void UsbAsync::fill_transfer(WTransfer& transfer, std::string&& buf)
 {
-    std::string& buf = write_queue_.front();
     libusb_fill_bulk_transfer(transfer.get_libusb_transfer(), device_handle_,
                               out_endpoit_, reinterpret_cast<uint8_t*>(buf.data()), buf.size(),
                               &UsbAsync::write_cb, this, timeout_write);
@@ -147,7 +132,6 @@ void UsbAsync::fill_transfer(WTransfer& transfer)
 
 void UsbAsync::fill_transfer(RTransfer& transfer)
 {
-    transfer.alloc_buffer(device_handle_);
     libusb_fill_bulk_transfer(transfer.get_libusb_transfer(), device_handle_,
                               in_endoint_, transfer.get_buffer(), max_transfer_size,
                               &UsbAsync::read_cb, this, timeout_read);
@@ -155,22 +139,16 @@ void UsbAsync::fill_transfer(RTransfer& transfer)
 
 void UsbAsync::write_cb(libusb_transfer * transfer)
 {
+    if (transfer->status != LIBUSB_TRANSFER_COMPLETED)
+        throw hdcp::libusb_error(transfer->status);
+
     UsbAsync * usb = (UsbAsync*)transfer->user_data;
-    if (transfer->status == LIBUSB_TRANSFER_COMPLETED) {
-        usb->write_queue_.pop();
-        if (!usb->write_queue_.empty()) {
-            usb->fill_transfer(usb->wtransfer_);
-            usb->wtransfer_.submit();
-        } else {
-            usb->wtransfer_.put_on_hold();
-        }
+    std::string buf;
+    if (usb->write_queue_.try_dequeue(buf)) {
+        usb->fill_transfer(*(usb->wtransfer_), std::move(buf));
+        usb->wtransfer_->submit();
     } else {
-        log_warn(usb->logger_, "write failed, libusb error {}",
-                 libusb_error_name(transfer->status));
-        if (usb->wtransfer_.n_retry() < write_retry)
-            usb->wtransfer_.resubmit();
-        else
-            throw hdcp::libusb_error(transfer->status);
+        usb->wtransfer_->put_on_hold();
     }
 }
 
@@ -178,12 +156,39 @@ void UsbAsync::read_cb(libusb_transfer * transfer)
 {
     UsbAsync * usb = (UsbAsync*)transfer->user_data;
     usb->rtransfer_curr_ = usb->rtransfer_prev_;
-    usb->rtransfer_curr_.submit();
+    usb->rtransfer_curr_->submit();
 
-    if (transfer->status == LIBUSB_TRANSFER_COMPLETED) {
-        usb->read_queue_.push(std::string(transfer->buffer,
-                                          transfer->buffer + transfer->actual_length));
-    } else {
+    if (transfer->status != LIBUSB_TRANSFER_COMPLETED)
         throw hdcp::libusb_error(transfer->status);
+
+    if (!usb->read_queue_.try_enqueue(std::string(transfer->buffer,
+                                                  transfer->buffer + transfer->actual_length)))
+        throw hdcp::transport_error("read queue full");
+}
+
+void UsbAsync::run()
+{
+    while (is_running()) {
+        try {
+            libusb_handle_events(ctx_);
+        } catch (std::exception& e) {
+            log_error(logger_, e.what());
+        }
     }
+}
+
+void UsbAsync::stop()
+{
+    common::Thread::stop();
+    close();
+    if (joinable())
+        join();
+}
+
+void UsbAsync::start()
+{
+    if (is_running())
+        return;
+    open();
+    common::Thread::start(0);
 }

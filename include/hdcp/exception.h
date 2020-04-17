@@ -14,12 +14,6 @@ public:
     libusb_error(int error_code): std::runtime_error(libusb_error_name(error_code)) {}
 };
 
-class device_error: public std::runtime_error
-{
-public:
-    device_error(const std::string& what_arg): std::runtime_error(what_arg) {}
-};
-
 class transport_error: public std::runtime_error
 {
 public:

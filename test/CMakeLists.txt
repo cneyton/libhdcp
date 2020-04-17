@@ -1,4 +1,5 @@
 set(files
+    transport_test.cpp
     packet_test.cpp
     application_test.cpp
     )
