@@ -10,7 +10,7 @@ void RequestManager::send_command(Packet::BlockType type, const std::string& dat
         throw hdcp::application_error("transport null pointer");
 
     common::TimeoutQueue::Id id =
-        timeout_queue_.add_repeating(now_, timeout.count()/time_base_ms_,
+        timeout_queue_.add_repeating(now_, timeout.count()/time_base_ms.count(),
                                      std::bind(&RequestManager::cmd_timeout_cb, this,
                                                std::placeholders::_1, std::placeholders::_2));
 
@@ -36,7 +36,7 @@ void RequestManager::send_hip(const Identification& host_id, std::chrono::millis
     Packet hip = Packet::make_hip(++packet_id_, host_id);
     transport_->write(hip.get_data());
     // set timeout
-    dip_id_ = timeout_queue_.add(now_, timeout.count()/time_base_ms_,
+    dip_id_ = timeout_queue_.add(now_, timeout.count()/time_base_ms.count(),
                                  std::bind(&RequestManager::dip_timeout_cb, this,
                                            std::placeholders::_1, std::placeholders::_2));
 }
@@ -48,14 +48,14 @@ void RequestManager::start_keepalive_management(std::chrono::milliseconds keepal
         throw hdcp::application_error("transport null pointer");
     ka_timeout_flag_ = false;
     keepalive_mngt_id_ =
-        timeout_queue_.add_repeating(now_, keepalive_interval.count()/time_base_ms_,
+        timeout_queue_.add_repeating(now_, keepalive_interval.count()/time_base_ms.count(),
                                      std::bind(&RequestManager::ka_mngt_timeout_cb, this,
                                                std::placeholders::_1, std::placeholders::_2));
     // send keepalive
     Packet ka = Packet::make_keepalive(++packet_id_);
     transport_->write(ka.get_data());
     // set timeout
-    timeout_keepalive_ = keepalive_timeout.count()/time_base_ms_;
+    timeout_keepalive_ = keepalive_timeout.count()/time_base_ms.count();
     keepalive_id_ = timeout_queue_.add(now_, timeout_keepalive_,
                                        std::bind(&RequestManager::ka_timeout_cb, this,
                                                  std::placeholders::_1, std::placeholders::_2));
@@ -148,7 +148,7 @@ void RequestManager::run()
     notify_running(0);
     while (is_running()) {
         timeout_queue_.run_once(now_++);
-        std::this_thread::sleep_for(std::chrono::milliseconds(time_base_ms_));
+        std::this_thread::sleep_for(time_base_ms);
     }
     stop_keepalive_management();
     clear();

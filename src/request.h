@@ -79,8 +79,7 @@ public:
     bool dip_timeout()       const {return dip_timeout_flag_;}
 
 private:
-    static const int64_t time_base_ms_ = 100;
-    static const uint    max_retry_    = 4;
+    static const uint max_retry_    = 4;
 
     struct by_request {};
     struct by_command {};
