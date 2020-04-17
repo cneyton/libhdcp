@@ -6,6 +6,7 @@
 #include <string_view>
 #include <vector>
 
+#include "transport.h"
 #include "identification.h"
 
 namespace hdcp

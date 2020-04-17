@@ -134,8 +134,8 @@ std::string Packet::make_block(BlockType type, const std::string& data)
 
 void Packet::validate_packet() const
 {
-    if (data_.size() < sizeof(Packet::Header))
-        throw hdcp::packet_error(fmt::format("packet too small: size = {}", data_.size()));
+    if (data_.size() < sizeof(Packet::Header) || data_.size() > max_transfer_size)
+        throw hdcp::packet_error(fmt::format("invalid buffer size: {}", data_.size()));
 
     const Header * h = get_header();
     if (compute_hcrc() != h->h_crc)
