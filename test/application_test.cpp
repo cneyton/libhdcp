@@ -1,8 +1,7 @@
 #include <iostream>
 
 #include "common/log.h"
-#include "hdcp/transport.h"
-#include "application.h"
+#include "hdcp/hdcp.h"
 #include "spdlog/sinks/stdout_color_sinks.h"
 
 using namespace hdcp;

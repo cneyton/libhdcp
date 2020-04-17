@@ -1,5 +1,5 @@
 #include "common/log.h"
-#include "usb_async.h"
+#include "hdcp/hdcp.h"
 #include <exception>
 
 #define ITFC_NB                     1

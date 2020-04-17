@@ -13,7 +13,7 @@
 #include "common/timeout_queue.h"
 #include "common/thread.h"
 
-#include "hdcp/transport.h"
+#include "transport.h"
 #include "packet.h"
 
 namespace hdcp

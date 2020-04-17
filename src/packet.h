@@ -6,11 +6,10 @@
 #include <string_view>
 #include <vector>
 
-#include "hdcp/hdcp.h"
+#include "identification.h"
 
 namespace hdcp
 {
-
 
 class Packet
 {

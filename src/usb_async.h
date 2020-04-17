@@ -6,7 +6,7 @@
 #include "common/readerwriterqueue.h"
 #include "common/thread.h"
 
-#include "hdcp/transport.h"
+#include "transport.h"
 
 namespace hdcp
 {

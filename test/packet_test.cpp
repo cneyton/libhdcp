@@ -1,6 +1,6 @@
 #include <string>
 #include <iostream>
-#include  "packet.h"
+#include  "hdcp/hdcp.h"
 
 using namespace hdcp;
 

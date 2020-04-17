@@ -7,7 +7,8 @@
 #include "common/thread.h"
 
 #include "request.h"
-#include "hdcp/transport.h"
+#include "transport.h"
+#include "identification.h"
 
 namespace hdcp
 {
@@ -20,14 +21,14 @@ constexpr std::chrono::milliseconds keepalive_interval(3000);
 class Application: public common::Log, public common::Thread
 {
 public:
-    Application(common::Logger logger, Transport* transport, const Identification& host_id);
-    virtual ~Application();
-
     enum class State {
         disconnected,
         connecting,
         connected
     };
+
+    Application(common::Logger logger, Transport* transport, const Identification& host_id);
+    virtual ~Application();
 
     State get_state() const {return statemachine_.get_state();};
     const Identification& get_device_id() const {return device_id_;}
