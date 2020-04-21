@@ -50,12 +50,12 @@ private:
 };
 
 
-class UsbAsync: public common::Log, public common::Thread, public Transport
+class UsbAsync: public common::Log, private common::Thread, public Transport
 {
 public:
     UsbAsync(common::Logger logger, int itfc_nb,
              uint16_t vendor_id, uint16_t product_id,
-             uint8_t in_endoint, uint8_t out_endpoint);
+             uint8_t in_endpoint, uint8_t out_endpoint);
     virtual ~UsbAsync();
 
     virtual void write(const std::string& buf);
@@ -65,6 +65,8 @@ public:
     virtual void start();
 
 private:
+    using common::Thread::start;
+
     libusb_context       * ctx_ = nullptr;
     libusb_device_handle * device_handle_ = nullptr;
 
