@@ -18,7 +18,7 @@ constexpr std::chrono::milliseconds command_timeout_(1000);
 constexpr std::chrono::milliseconds keepalive_timeout(1000);
 constexpr std::chrono::milliseconds keepalive_interval(3000);
 
-class Application: public common::Log, public common::Thread
+class Application: public common::Log, private common::Thread
 {
 public:
     enum class State {
@@ -33,10 +33,16 @@ public:
     State get_state() const {return statemachine_.get_state();};
     const Identification& get_device_id() const {return device_id_;}
 
+    void start();
+    void stop();
+    void connect();
+    bool wait_connected();
+    void disconnect();
     void send_command(Packet::BlockType id, const std::string& data, Request::Callback cb);
-    void reconnect();
 
 private:
+    using common::Thread::start;
+
     int handler_state_disconnected_();
     int handler_state_connecting_();
     int handler_state_connected_();
@@ -68,6 +74,8 @@ private:
 
     std::mutex              mutex_connection_;
     std::condition_variable cv_connection_;
+    std::mutex              mutex_connecting_;
+    std::condition_variable cv_connecting_;
 
     common::Statemachine<State>    statemachine_;
     Transport*                     transport_;
