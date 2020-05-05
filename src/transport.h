@@ -15,11 +15,17 @@ constexpr uint timeout_write = time_base_ms.count();
 class Transport
 {
 public:
+    Transport()                                = default;
+    virtual ~Transport()                       = default;
+    Transport(const Transport&)                = delete;
+    Transport& operator=(const Transport&)     = delete;
+    Transport(Transport&&)                     = delete;
+    Transport& operator=(Transport&&)          = delete;
     virtual void write(const std::string& buf) = 0;
     virtual void write(std::string&& buf)      = 0;
     virtual bool read(std::string& buf)        = 0;
-    virtual void start() = 0;
-    virtual void stop()  = 0;
+    virtual void start()                       = 0;
+    virtual void stop()                        = 0;
 };
 
 } /* namespace hdcp */
