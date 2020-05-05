@@ -3,11 +3,12 @@
 
 using namespace hdcp;
 
-Application::Application(common::Logger logger, Transport* transport, const Identification& host_id):
+Application::Application(common::Logger logger, Transport* transport, DataCallback data_cb,
+                         const Identification& host_id):
     common::Log(logger),
     statemachine_(logger, "com", states_, State::disconnected),
     transport_(transport), request_manager_(logger, transport),
-    host_id_(host_id)
+    host_id_(host_id), data_cb_(data_cb)
 {
     statemachine_.display_trace();
 }
@@ -132,6 +133,7 @@ int Application::handler_state_connected_()
         request_manager_.ack_command(p);
         break;
     case Packet::Type::data:
+        data_cb_(p);
         break;
     case Packet::Type::ka_ack:
         request_manager_.ack_keepalive();

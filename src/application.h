@@ -21,13 +21,15 @@ constexpr std::chrono::milliseconds keepalive_interval(3000);
 class Application: public common::Log, private common::Thread
 {
 public:
+    using DataCallback = std::function<void(const Packet&)>;
     enum class State {
         disconnected,
         connecting,
         connected
     };
 
-    Application(common::Logger logger, Transport* transport, const Identification& host_id);
+    Application(common::Logger logger, Transport* transport, DataCallback data_cb,
+                const Identification& host_id);
     virtual ~Application();
 
     State get_state() const {return statemachine_.get_state();};
@@ -82,6 +84,7 @@ private:
     RequestManager                 request_manager_;
     Identification                 host_id_;
     Identification                 device_id_;
+    DataCallback                   data_cb_;
 
     virtual void run();
     void wait_connection_request();
