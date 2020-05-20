@@ -2,6 +2,7 @@ set(files
     transport_test.cpp
     packet_test.cpp
     application_test.cpp
+    transport_tcp_test.cpp
     )
 
 foreach(file ${files})

@@ -1,4 +1,6 @@
 build/
+_xcode/
+_build/
 *.swp
 tags
 compile_commands.json

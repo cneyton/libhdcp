@@ -9,8 +9,8 @@ namespace hdcp
 
 constexpr std::size_t max_transfer_size = 2048;
 constexpr std::chrono::milliseconds time_base_ms(100);
-constexpr uint timeout_read  = 0; // no timeout when reading
-constexpr uint timeout_write = time_base_ms.count();
+constexpr uint64_t timeout_read  = 10000; // no timeout when reading
+constexpr uint64_t timeout_write = time_base_ms.count();
 
 class Transport
 {
