@@ -27,13 +27,23 @@ void RequestManager::send_command(Packet::BlockType type, const std::string& dat
     }
 }
 
-void RequestManager::send_hip(const Identification& host_id, std::chrono::milliseconds timeout)
+void RequestManager::send_data(std::vector<Packet::Block>& blocks)
+{
+    if (!transport_)
+        throw hdcp::application_error("transport null pointer");
+
+    // send data
+    Packet data = Packet::make_data(++packet_id_, blocks);
+    transport_->write(data.get_data());
+}
+
+void RequestManager::send_hip(const Identification& id, std::chrono::milliseconds timeout)
 {
     if (!transport_)
         throw hdcp::application_error("transport null pointer");
     dip_timeout_flag_ = false;
     // send hip
-    Packet hip = Packet::make_hip(++packet_id_, host_id);
+    Packet hip = Packet::make_hip(++packet_id_, id);
     transport_->write(hip.get_data());
     // set timeout
     dip_id_ = timeout_queue_.add(now_, timeout.count()/time_base_ms.count(),
@@ -41,8 +51,17 @@ void RequestManager::send_hip(const Identification& host_id, std::chrono::millis
                                            std::placeholders::_1, std::placeholders::_2));
 }
 
-void RequestManager::start_keepalive_management(std::chrono::milliseconds keepalive_interval,
-                                std::chrono::milliseconds keepalive_timeout)
+void RequestManager::send_dip(const Identification& id)
+{
+    if (!transport_)
+        throw hdcp::application_error("transport null pointer");
+    // send dip
+    Packet dip = Packet::make_dip(++packet_id_, id);
+    transport_->write(dip.get_data());
+}
+
+void RequestManager::start_master_keepalive_management(std::chrono::milliseconds keepalive_interval,
+                                                std::chrono::milliseconds keepalive_timeout)
 {
     if (!transport_)
         throw hdcp::application_error("transport null pointer");
@@ -61,9 +80,26 @@ void RequestManager::start_keepalive_management(std::chrono::milliseconds keepal
                                                  std::placeholders::_1, std::placeholders::_2));
 }
 
-void RequestManager::stop_keepalive_management()
+void RequestManager::start_slave_keepalive_management(std::chrono::milliseconds keepalive_timeout)
+{
+    if (!transport_)
+        throw hdcp::application_error("transport null pointer");
+    ka_timeout_flag_ = false;
+    // set timeout
+    timeout_keepalive_ = keepalive_timeout.count()/time_base_ms.count();
+    keepalive_id_ = timeout_queue_.add(now_, timeout_keepalive_,
+                                       std::bind(&RequestManager::ka_timeout_cb, this,
+                                                 std::placeholders::_1, std::placeholders::_2));
+}
+
+void RequestManager::stop_master_keepalive_management()
 {
     timeout_queue_.erase(keepalive_mngt_id_);
+}
+
+void RequestManager::stop_slave_keepalive_management()
+{
+    timeout_queue_.erase(keepalive_id_);
 }
 
 void RequestManager::ack_command(Packet& packet)
@@ -86,6 +122,14 @@ void RequestManager::ack_command(Packet& packet)
 void RequestManager::ack_keepalive()
 {
     timeout_queue_.erase(keepalive_id_);
+}
+
+void RequestManager::keepalive()
+{
+    timeout_queue_.erase(keepalive_id_);
+    keepalive_id_ = timeout_queue_.add(now_, timeout_keepalive_,
+                                       std::bind(&RequestManager::ka_timeout_cb, this,
+                                                 std::placeholders::_1, std::placeholders::_2));
 }
 
 void RequestManager::ack_dip()
@@ -150,7 +194,6 @@ void RequestManager::run()
         timeout_queue_.run_once(now_++);
         std::this_thread::sleep_for(time_base_ms);
     }
-    stop_keepalive_management();
     clear();
 }
 

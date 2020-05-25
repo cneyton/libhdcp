@@ -1,31 +1,31 @@
-#include "application.h"
+#include "slave.h"
 #include "hdcp/exception.h"
 
 using namespace hdcp;
 
-Application::Application(common::Logger logger, Transport* transport, DataCallback data_cb,
-                         const Identification& host_id):
+Slave::Slave(common::Logger logger, Transport* transport, CmdCallback cmd_cb,
+                         const Identification& id):
     common::Log(logger),
-    statemachine_(logger, "com", states_, State::disconnected),
+    statemachine_(logger, "com_slave", states_, State::disconnected),
     transport_(transport), request_manager_(logger, transport),
-    host_id_(host_id), data_cb_(data_cb)
+    id_(id), cmd_cb_(cmd_cb)
 {
     statemachine_.display_trace();
 }
 
-Application::~Application()
+Slave::~Slave()
 {
     stop();
 }
 
-void Application::start()
+void Slave::start()
 {
     if (is_running())
         return;
     common::Thread::start(0);
 }
 
-void Application::stop()
+void Slave::stop()
 {
     common::Thread::stop();
     if (joinable())
@@ -35,22 +35,15 @@ void Application::stop()
     statemachine_.wakeup();
 }
 
-void Application::send_command(Packet::BlockType id, const std::string& data, Request::Callback cb)
+void Slave::send_data(std::vector<Packet::Block>& blocks)
 {
     if (get_state() != State::connected)
-        throw hdcp::application_error("can't send command while disconnected");
+        throw hdcp::application_error("can't send data while disconnected");
 
-    request_manager_.send_command(id, data, cb, command_timeout_);
+    request_manager_.send_data(blocks);
 }
 
-void Application::connect()
-{
-    std::unique_lock<std::mutex> lk(mutex_connection_);
-    connection_requested_ = true;
-    cv_connection_.notify_all();
-}
-
-bool Application::wait_connected()
+bool Slave::wait_connected()
 {
     std::unique_lock<std::mutex> lk(mutex_connecting_);
     cv_connecting_.wait(lk, [&]{State s = statemachine_.get_state();
@@ -58,35 +51,49 @@ bool Application::wait_connected()
     return statemachine_.get_state() == State::connected;
 }
 
-void Application::disconnect()
+void Slave::disconnect()
 {
     disconnection_requested_ = true;
 }
 
-int Application::handler_state_disconnected_()
+int Slave::handler_state_disconnected_()
 {
     if (statemachine_.get_nb_loop_in_current_state() == 1) {
         disconnection_requested_ = false;
+        request_manager_.stop_slave_keepalive_management();
         request_manager_.stop();
         if (request_manager_.joinable())
             request_manager_.join();
-        // notify connection attempt failed
-        std::unique_lock<std::mutex> lk(mutex_connecting_);
-        cv_connecting_.notify_all();
-        // need to return here to not wait when stopping
         return 0;
     }
 
-    wait_connection_request();
+    if (!transport_)
+        throw hdcp::application_error("transport null pointer");
+
+    std::string buf;
+    if (!transport_->read(buf))
+        return 0;
+
+    Packet p(std::move(buf));
+    switch (p.get_type()) {
+    case Packet::Type::hip:
+        connection_requested_ = true;
+        request_manager_.start(1);
+        request_manager_.send_dip(id_);
+        request_manager_.start_slave_keepalive_management(keepalive_interval);
+        break;
+    default:
+        log_warn(logger_, "you should only receive hip in disconnected state");
+        break;
+    }
+
     return 0;
 }
 
-int Application::handler_state_connecting_()
+int Slave::handler_state_connecting_()
 {
     if (statemachine_.get_nb_loop_in_current_state() == 1) {
         connection_requested_ = false;
-        request_manager_.start(1);
-        request_manager_.send_hip(host_id_, connecting_timeout_);
     }
 
     if (!transport_)
@@ -98,23 +105,22 @@ int Application::handler_state_connecting_()
 
     Packet p(std::move(buf));
     switch (p.get_type()) {
-    case Packet::Type::dip:
-        dip_received_ = true;
-        request_manager_.ack_dip();
+    case Packet::Type::ka:
+        request_manager_.keepalive();
+        ka_received_ = true;
         break;
     default:
-        log_warn(logger_, "you should only receive dip in connecting state");
+        log_warn(logger_, "you should only receive ka in connecting state");
         break;
     }
 
     return 0;
 }
 
-int Application::handler_state_connected_()
+int Slave::handler_state_connected_()
 {
     if (statemachine_.get_nb_loop_in_current_state() == 1) {
-        dip_received_ = false;
-        request_manager_.start_keepalive_management(keepalive_interval, keepalive_timeout);
+        ka_received_ = false;
 
         std::unique_lock<std::mutex> lk(mutex_connecting_);
         cv_connecting_.notify_all();
@@ -129,14 +135,15 @@ int Application::handler_state_connected_()
 
     Packet p(std::move(buf));
     switch (p.get_type()) {
-    case Packet::Type::cmd_ack:
-        request_manager_.ack_command(p);
+    case Packet::Type::hip:
+        connection_requested_ = true;
         break;
-    case Packet::Type::data:
-        data_cb_(p);
+    case Packet::Type::cmd:
+        request_manager_.keepalive();
+        cmd_cb_(p);
         break;
-    case Packet::Type::ka_ack:
-        request_manager_.ack_keepalive();
+    case Packet::Type::ka:
+        request_manager_.keepalive();
         break;
     default:
         log_warn(logger_,
@@ -147,28 +154,27 @@ int Application::handler_state_connected_()
     return 0;
 }
 
-int Application::check_connection_requested_()
+int Slave::check_connection_requested_()
 {
     return connection_requested_ ? common::statemachine::goto_next_state:
                                    common::statemachine::stay_curr_state;
 }
 
-int Application::check_connected_()
+int Slave::check_connected_()
 {
-    return dip_received_ ? common::statemachine::goto_next_state:
+    return ka_received_ ? common::statemachine::goto_next_state:
                            common::statemachine::stay_curr_state;
 }
 
-int Application::check_disconnected_()
+int Slave::check_disconnected_()
 {
-    if (disconnection_requested_ || request_manager_.dip_timeout() ||
-        request_manager_.keepalive_timeout())
+    if (disconnection_requested_ || request_manager_.keepalive_timeout())
         return common::statemachine::goto_next_state;
     else
         return common::statemachine::stay_curr_state;
 }
 
-void Application::run()
+void Slave::run()
 {
     while (is_running()) {
         try {
@@ -177,10 +183,4 @@ void Application::run()
             log_warn(logger_, e.what());
         }
     }
-}
-
-void Application::wait_connection_request()
-{
-    std::unique_lock<std::mutex> lk(mutex_connection_);
-    cv_connection_.wait(lk, [&]{return connection_requested_ ? true:false;});
 }

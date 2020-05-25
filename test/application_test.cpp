@@ -41,6 +41,10 @@ public:
     }
 };
 
+void data_cb(const Packet&)
+{
+}
+
 int main()
 {
     common::Logger logger(spdlog::stdout_color_mt("hdcp"));
@@ -48,8 +52,7 @@ int main()
 
     TransportTest transport;
     Identification host_id("host", "00001", "0.1.01", "0.1.02");
-    Application app(logger, &transport, host_id);
-    app.start(0);
-    if (app.joinable())
-        app.join();
+    Master m(logger, &transport, data_cb, host_id);
+    m.start();
+    m.stop();
 }

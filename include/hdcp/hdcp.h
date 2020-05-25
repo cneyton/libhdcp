@@ -2,5 +2,5 @@
 
 #include "../../src/usb_async.h"
 #include "../../src/tcp_async.h"
-#include "../../src/application.h"
-#include "../../src/application_slave.h"
+#include "../../src/master.h"
+#include "../../src/slave.h"

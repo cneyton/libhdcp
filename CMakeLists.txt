@@ -18,7 +18,7 @@ find_path(BOOST_INCLUDE_DIR boost)
 message(STATUS "Boost version: ${Boost_VERSION}")
 
 if(Boost_FOUND)
-    include_directories(${Boost_INCLUDE_DIRS}) 
+    include_directories(${Boost_INCLUDE_DIRS})
 endif()
 
 IF(APPLE)

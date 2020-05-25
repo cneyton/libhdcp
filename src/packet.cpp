@@ -1,7 +1,6 @@
 #include "packet.h"
 #include "hdcp/exception.h"
 #include "hdcp/hdcp.h"
-#include <string>
 
 using namespace hdcp;
 
@@ -39,6 +38,16 @@ Packet Packet::make_command(Id id, BlockType type, const std::string& data)
 {
     std::string payload(Packet::make_block(type, data));
     std::string header(Packet::make_header(id, Packet::Type::cmd, 1, payload));
+    return Packet(header + payload);
+}
+
+Packet Packet::make_data(Id id, std::vector<Block>& blocks)
+{
+    std::string payload;
+    for (auto& b: blocks) {
+        payload += Packet::make_block(b);
+    }
+    std::string header(Packet::make_header(id, Packet::Type::data, blocks.size(), payload));
     return Packet(header + payload);
 }
 
@@ -122,14 +131,26 @@ std::string Packet::make_header(Id id, Type type, uint8_t n_block, const std::st
 
 std::string Packet::make_block(BlockType type, const std::string& data)
 {
-    char * it = reinterpret_cast<char*>(&type);
-    std::string type_str(it, it + sizeof(type));
+    Block b = {
+        .type = type,
+        .data = data
+    };
+    return Packet::make_block(b);
+}
 
-    uint16_t len = data.size();
+std::string Packet::make_block(Block& b)
+{
+    char * it = reinterpret_cast<char*>(&b.type);
+    std::string type_str(it, it + sizeof(Block::type));
+
+    uint16_t len = b.data.size();
     it = reinterpret_cast<char*>(&len);
     std::string len_str(it, it + sizeof(len));
 
-    return type_str + len_str + data;
+    std::string ret = type_str + len_str;
+    ret.append(b.data);
+
+    return ret;
 }
 
 void Packet::validate_packet() const

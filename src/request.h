@@ -66,14 +66,18 @@ public:
 
     void send_command(Packet::BlockType type, const std::string& data,
                       Request::Callback request_cb, std::chrono::milliseconds timeout);
-    void send_hip(const Identification& host_id, std::chrono::milliseconds timeout);
-    void start_keepalive_management(std::chrono::milliseconds keepalive_interval,
-                                    std::chrono::milliseconds keepalive_timeout);
-    void stop_keepalive_management();
-
+    void send_data(std::vector<Packet::Block>& blocks);
+    void send_hip(const Identification& id, std::chrono::milliseconds timeout);
+    void send_dip(const Identification& id);
+    void start_master_keepalive_management(std::chrono::milliseconds keepalive_interval,
+                                           std::chrono::milliseconds keepalive_timeout);
+    void start_slave_keepalive_management(std::chrono::milliseconds keepalive_timeout);
+    void stop_master_keepalive_management();
+    void stop_slave_keepalive_management();
     void ack_command(Packet& packet);
     void ack_dip();
     void ack_keepalive();
+    void keepalive();
 
     bool keepalive_timeout() const {return ka_timeout_flag_;}
     bool dip_timeout()       const {return dip_timeout_flag_;}

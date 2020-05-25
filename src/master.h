@@ -1,19 +1,17 @@
 #pragma once
 
-#include <chrono>
-
 #include "common/log.h"
 #include "common/statemachine.h"
 #include "common/thread.h"
 
 #include "request.h"
 #include "transport.h"
-#include "identification.h"
+#include "application.h"
 
 namespace hdcp
 {
 
-class ApplicationSlave: public common::Log, private common::Thread
+class Master: public common::Log, private common::Thread
 {
 public:
     using DataCallback = std::function<void(const Packet&)>;
@@ -23,9 +21,9 @@ public:
         connected
     };
 
-    ApplicationSlave(common::Logger logger, Transport* transport, DataCallback data_cb,
+    Master(common::Logger logger, Transport* transport, DataCallback data_cb,
                 const Identification& host_id);
-    virtual ~ApplicationSlave();
+    virtual ~Master();
 
     State get_state() const {return statemachine_.get_state();};
     const Identification& get_device_id() const {return device_id_;}
@@ -50,17 +48,17 @@ private:
 
     const common::StatesList<State> states_ {
         {"disconnected", State::disconnected,
-            {{std::bind(&ApplicationSlave::handler_state_disconnected_, this), State::disconnected},
-             {std::bind(&ApplicationSlave::check_connection_requested_, this), State::connecting}}
+            {{std::bind(&Master::handler_state_disconnected_, this), State::disconnected},
+             {std::bind(&Master::check_connection_requested_, this), State::connecting}}
         },
         {"connecting", State::connecting,
-            {{std::bind(&ApplicationSlave::handler_state_connecting_, this),   State::connecting},
-             {std::bind(&ApplicationSlave::check_disconnected_, this),         State::disconnected},
-             {std::bind(&ApplicationSlave::check_connected_, this),            State::connected}}
+            {{std::bind(&Master::handler_state_connecting_, this),   State::connecting},
+             {std::bind(&Master::check_disconnected_, this),         State::disconnected},
+             {std::bind(&Master::check_connected_, this),            State::connected}}
         },
         {"connected", State::connected,
-            {{std::bind(&ApplicationSlave::handler_state_connected_, this),    State::connected},
-             {std::bind(&ApplicationSlave::check_disconnected_, this),         State::disconnected}}
+            {{std::bind(&Master::handler_state_connected_, this),    State::connected},
+             {std::bind(&Master::check_disconnected_, this),         State::disconnected}}
         }
     };
 

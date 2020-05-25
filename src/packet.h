@@ -7,7 +7,7 @@
 #include <vector>
 
 #include "transport.h"
-#include "identification.h"
+#include "application.h"
 
 namespace hdcp
 {
@@ -50,6 +50,7 @@ public:
     const std::string& get_data() const {return data_;};
 
     static Packet make_command(Id, BlockType, const std::string&);
+    static Packet make_data(Id, std::vector<Block>& blocks);
     static Packet make_keepalive(Id id);
     static Packet make_keepalive_ack(Id id);
     static Packet make_hip(Id id, const hdcp::Identification& host_id);
@@ -93,6 +94,7 @@ private:
 
     static std::string make_header(Id id, Type type, uint8_t n_block, const std::string& payload);
     static std::string make_block(BlockType type, const std::string& data);
+    static std::string make_block(Block& b);
 
     std::string data_;
 
