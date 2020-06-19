@@ -70,9 +70,9 @@ private:
     libusb_context       * ctx_ = nullptr;
     libusb_device_handle * device_handle_ = nullptr;
 
+    int      itfc_nb_;
     uint16_t vendor_id_;
     uint16_t product_id_;
-    int      itfc_nb_;
     uint8_t  in_endoint_;
     uint8_t  out_endpoit_;
 

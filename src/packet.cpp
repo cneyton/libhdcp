@@ -128,6 +128,7 @@ std::string Packet::make_header(Id id, Type type, uint8_t n_block, const std::st
         .type = type,
         .n_block = n_block,
         .p_crc = Packet::compute_crc(std::string_view(payload.data(), payload.size())),
+        .h_crc = 0
     };
 
     char * it = reinterpret_cast<char*>(&h);
