@@ -52,7 +52,7 @@ target_include_directories(hdcp
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     )
 target_link_libraries(hdcp PUBLIC common usb-1.0 ${Boost_LIBRARIES})
-target_compile_options(hdcp PUBLIC -Werror -Wall -Wextra)
+target_compile_options(hdcp PUBLIC -Wall -Wextra)
 
 ################################################################################
 # Tests
