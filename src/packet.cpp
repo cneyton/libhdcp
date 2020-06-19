@@ -41,6 +41,14 @@ Packet Packet::make_command(Id id, BlockType type, const std::string& data)
     return Packet(header + payload);
 }
 
+Packet Packet::make_cmd_ack(Id id, BlockType type, Id cmd_id)
+{
+    std::string data(reinterpret_cast<char*>(&cmd_id), sizeof(Id));
+    std::string payload(Packet::make_block(type, data));
+    std::string header(Packet::make_header(id, Packet::Type::cmd_ack, 1, payload));
+    return Packet(header + payload);
+}
+
 Packet Packet::make_data(Id id, std::vector<Block>& blocks)
 {
     std::string payload;

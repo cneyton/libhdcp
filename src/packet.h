@@ -50,6 +50,7 @@ public:
     const std::string& get_data() const {return data_;};
 
     static Packet make_command(Id, BlockType, const std::string&);
+    static Packet make_cmd_ack(Id, BlockType, Id);
     static Packet make_data(Id, std::vector<Block>& blocks);
     static Packet make_keepalive(Id id);
     static Packet make_keepalive_ack(Id id);

@@ -27,6 +27,18 @@ void RequestManager::send_command(Packet::BlockType type, const std::string& dat
     }
 }
 
+void RequestManager::send_cmd_ack(Packet& packet)
+{
+    if (!transport_)
+        throw hdcp::application_error("transport null pointer");
+
+    // send command ack
+    Packet cmd_ack = Packet::make_cmd_ack(++packet_id_, packet.get_blocks().at(0).type,
+                                          packet.get_id());
+    transport_->write(cmd_ack.get_data());
+
+}
+
 void RequestManager::send_data(std::vector<Packet::Block>& blocks)
 {
     if (!transport_)

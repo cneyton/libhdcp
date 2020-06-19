@@ -139,7 +139,7 @@ int Slave::handler_state_connected_()
         connection_requested_ = true;
         break;
     case Packet::Type::cmd:
-        request_manager_.keepalive();
+        request_manager_.send_cmd_ack(p);
         cmd_cb_(p);
         break;
     case Packet::Type::ka:

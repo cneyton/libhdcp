@@ -66,6 +66,7 @@ public:
 
     void send_command(Packet::BlockType type, const std::string& data,
                       Request::Callback request_cb, std::chrono::milliseconds timeout);
+    void send_cmd_ack(Packet& packet);
     void send_data(std::vector<Packet::Block>& blocks);
     void send_hip(const Identification& id, std::chrono::milliseconds timeout);
     void send_dip(const Identification& id);
