@@ -104,12 +104,18 @@ void RequestManager::stop_slave_keepalive_management()
 
 void RequestManager::ack_command(Packet& packet)
 {
+    // get the first block, it should have the same block type of cmd sent
+    // and the data should correspond to its packet id
+    auto block = packet.get_blocks().at(0);
+    if (block.data.size() != sizeof(Packet::Id))
+        throw hdcp::application_error("first block of cmd ack should contain a packet id");
+    const Packet::Id id = *reinterpret_cast<const Packet::Id*>(block.data.data());
+
     std::unique_lock<std::mutex> lk(requests_mutex_);
     auto& set_by_command = requests_.get<by_command>();
-    auto search = set_by_command.find(packet.get_id());
+    auto search = set_by_command.find(id);
     if (search == set_by_command.end())
-        throw hdcp::application_error(fmt::format("request with packet id {} not found",
-                                                  packet.get_id()));
+        throw hdcp::application_error(fmt::format("request with packet id {} not found", id));
     Request r(*search);
     r.set_status(Request::Status::fulfilled);
     r.set_ack(packet);
