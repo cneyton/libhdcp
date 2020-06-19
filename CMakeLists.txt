@@ -1,4 +1,4 @@
-cmake_minimum_required (VERSION 3.8)
+cmake_minimum_required (VERSION 3.15)
 project (libhdcp VERSION 0.1.0 LANGUAGES CXX)
 
 ################################################################################
@@ -39,8 +39,7 @@ add_subdirectory(dependencies)
 ################################################################################
 add_library(hdcp STATIC)
 
-target_sources(hdcp
-    PUBLIC
+target_sources(hdcp PUBLIC
     src/usb_async.cpp
     src/tcp_async.cpp
     src/request.cpp
