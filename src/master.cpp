@@ -98,6 +98,7 @@ int Master::handler_state_connecting_()
         return 0;
 
     Packet p(std::move(buf));
+    log_trace(logger_, "{}", p);
     switch (p.get_type()) {
     case Packet::Type::dip:
         dip_received_ = true;
@@ -129,6 +130,7 @@ int Master::handler_state_connected_()
         return 0;
 
     Packet p(std::move(buf));
+    log_trace(logger_, "{}", p);
     switch (p.get_type()) {
     case Packet::Type::cmd_ack:
         request_manager_.ack_command(p);

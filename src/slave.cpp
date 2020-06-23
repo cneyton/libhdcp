@@ -75,6 +75,7 @@ int Slave::handler_state_disconnected_()
         return 0;
 
     Packet p(std::move(buf));
+    log_trace(logger_, "{}", p);
     switch (p.get_type()) {
     case Packet::Type::hip:
         connection_requested_ = true;
@@ -104,6 +105,7 @@ int Slave::handler_state_connecting_()
         return 0;
 
     Packet p(std::move(buf));
+    log_trace(logger_, "{}", p);
     switch (p.get_type()) {
     case Packet::Type::ka:
         request_manager_.keepalive();
@@ -134,6 +136,7 @@ int Slave::handler_state_connected_()
         return 0;
 
     Packet p(std::move(buf));
+    log_trace(logger_, "{}", p);
     switch (p.get_type()) {
     case Packet::Type::hip:
         connection_requested_ = true;

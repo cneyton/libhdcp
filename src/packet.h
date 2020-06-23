@@ -1,10 +1,11 @@
-#ifndef PACKET_H
-#define PACKET_H
+#pragma once
 
 #include <cstdint>
 #include <string>
 #include <string_view>
 #include <vector>
+
+#include "common/log.h"
 
 #include "transport.h"
 #include "application.h"
@@ -43,6 +44,7 @@ public:
     virtual ~Packet();
 
     Id      get_id()       const {return get_header()->id;};
+    uint8_t get_ver()      const {return get_header()->ver;};
     Type    get_type()     const {return get_header()->type;};
     uint8_t get_nb_block() const {return get_header()->n_block;}
 
@@ -111,8 +113,19 @@ private:
     }
 
     void validate_packet() const;
+
+    friend std::ostream& operator<<(std::ostream& out, const Packet& p)
+    {
+        out << fmt::format("\npacket {}, type={:#x}, with {} block(s) (prot ver:{}),\n",
+                           p.get_id(), p.get_ver(), p.get_type(), p.get_nb_block());
+        int i = 0;
+        for (auto& b: p.get_blocks()) {
+            out << fmt::format("block {}, type {}, len {}\n\t",
+                               i++, b.type, b.data.length());
+            out << b.data << "\n";
+        }
+        return out;
+    }
 };
 
 } /* namespace hdcp */
-
-#endif /* PACKET_H */
