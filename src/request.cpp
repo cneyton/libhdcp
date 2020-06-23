@@ -73,7 +73,7 @@ void RequestManager::send_dip(const Identification& id)
 }
 
 void RequestManager::start_master_keepalive_management(std::chrono::milliseconds keepalive_interval,
-                                                std::chrono::milliseconds keepalive_timeout)
+                                                       std::chrono::milliseconds keepalive_timeout)
 {
     if (!transport_)
         throw hdcp::application_error("transport null pointer");
@@ -148,6 +148,9 @@ void RequestManager::keepalive()
     keepalive_id_ = timeout_queue_.add(now_, timeout_keepalive_,
                                        std::bind(&RequestManager::ka_timeout_cb, this,
                                                  std::placeholders::_1, std::placeholders::_2));
+    // send keepalive ack
+    Packet p = Packet::make_keepalive_ack(++packet_id_);
+    transport_->write(p.get_data());
 }
 
 void RequestManager::ack_dip()
@@ -196,6 +199,7 @@ void RequestManager::ka_mngt_timeout_cb(common::TimeoutQueue::Id, int64_t)
 {
     if (!transport_)
         throw hdcp::application_error("transport null pointer");
+
     // send keepalive
     Packet ka = Packet::make_keepalive(++packet_id_);
     transport_->write(ka.get_data());

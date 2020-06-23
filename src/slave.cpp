@@ -81,7 +81,7 @@ int Slave::handler_state_disconnected_()
         connection_requested_ = true;
         request_manager_.start(1);
         request_manager_.send_dip(id_);
-        request_manager_.start_slave_keepalive_management(keepalive_interval);
+        request_manager_.start_slave_keepalive_management(keepalive_timeout);
         break;
     default:
         log_warn(logger_, "you should only receive hip in disconnected state");
