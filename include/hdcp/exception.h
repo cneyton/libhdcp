@@ -2,6 +2,7 @@
 
 #include <stdexcept>
 #include <libusb-1.0/libusb.h>
+#include "boost/asio.hpp"
 
 #include "common/log.h"
 
@@ -30,6 +31,13 @@ class packet_error: public std::runtime_error
 {
 public:
     packet_error(const std::string& what_arg): std::runtime_error(what_arg) {}
+};
+
+class asio_error: public std::runtime_error
+{
+public:
+    asio_error(const boost::system::error_code& ec):
+        std::runtime_error(fmt::format("{} ({})", ec.message(), ec.value())) {}
 };
 
 } /* namespace hdcp */

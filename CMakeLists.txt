@@ -42,6 +42,7 @@ add_library(hdcp STATIC)
 target_sources(hdcp PUBLIC
     src/usb_async.cpp
     src/tcp_async.cpp
+    src/tcp_client.cpp
     src/request.cpp
     src/packet.cpp
     src/slave.cpp
