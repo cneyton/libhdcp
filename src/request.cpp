@@ -155,7 +155,7 @@ void RequestManager::ack_dip()
     timeout_queue_.erase(dip_id_);
 }
 
-void RequestManager::cmd_timeout_cb(common::TimeoutQueue::Id id, int64_t now)
+void RequestManager::cmd_timeout_cb(common::TimeoutQueue::Id id, int64_t)
 {
     std::unique_lock<std::mutex> lk(requests_mutex_);
     auto& set_by_request = requests_.get<by_request>();
@@ -180,19 +180,19 @@ void RequestManager::cmd_timeout_cb(common::TimeoutQueue::Id id, int64_t now)
     }
 }
 
-void RequestManager::ka_timeout_cb(common::TimeoutQueue::Id id, int64_t now)
+void RequestManager::ka_timeout_cb(common::TimeoutQueue::Id, int64_t)
 {
     log_warn(logger_, "keeaplive timeout");
     ka_timeout_flag_ = true;
 }
 
-void RequestManager::dip_timeout_cb(common::TimeoutQueue::Id id, int64_t now)
+void RequestManager::dip_timeout_cb(common::TimeoutQueue::Id, int64_t)
 {
     log_warn(logger_, "dip timeout");
     dip_timeout_flag_ = true;
 }
 
-void RequestManager::ka_mngt_timeout_cb(common::TimeoutQueue::Id id, int64_t now)
+void RequestManager::ka_mngt_timeout_cb(common::TimeoutQueue::Id, int64_t)
 {
     if (!transport_)
         throw hdcp::application_error("transport null pointer");
