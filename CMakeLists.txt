@@ -16,23 +16,10 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 ################################################################################
 # dependencies
 ################################################################################
-set(Boost_USE_STATIC_LIBS OFF)
-set(Boost_USE_MULTITHREADED ON)
-set(Boost_USE_STATIC_RUNTIME OFF)
-find_package(Boost 1.70 REQUIRED COMPONENTS system thread)
-find_path(BOOST_INCLUDE_DIR boost)
-message(STATUS "Boost version: ${Boost_VERSION}")
-
-if(Boost_FOUND)
-    include_directories(${Boost_INCLUDE_DIRS})
+if (TARGET common)
+else()
+    add_subdirectory(dependencies/libcommon)
 endif()
-
-if(APPLE)
-    # Fix linking on 10.14+. See https://stackoverflow.com/questions/54068035
-    link_directories(/usr/local/lib)
-endif()
-
-add_subdirectory(dependencies)
 
 ################################################################################
 # build
@@ -41,7 +28,7 @@ add_library(hdcp STATIC)
 
 target_sources(hdcp PUBLIC
     src/usb_async.cpp
-    src/tcp_async.cpp
+    src/tcp_server.cpp
     src/tcp_client.cpp
     src/request.cpp
     src/packet.cpp
@@ -52,7 +39,7 @@ target_include_directories(hdcp
     PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     )
-target_link_libraries(hdcp PUBLIC common usb-1.0 ${Boost_LIBRARIES})
+target_link_libraries(hdcp PUBLIC common usb-1.0)
 target_compile_options(hdcp PUBLIC -Wall -Wextra)
 
 ################################################################################
