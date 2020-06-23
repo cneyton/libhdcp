@@ -1,9 +1,9 @@
 set(files
     transport_test.cpp
     packet_test.cpp
-    application_test.cpp
-    transport_tcp_test.cpp
     tcp_client_test.cpp
+    master_tcp_test.cpp
+    slave_tcp_test.cpp
     )
 
 foreach(file ${files})
