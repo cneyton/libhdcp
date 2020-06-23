@@ -102,7 +102,7 @@ void TcpClient::run()
 
 void TcpClient::do_read()
 {
-    boost::asio::async_read(socket_, boost::asio::buffer(read_buf_),
+    socket_.async_receive(boost::asio::buffer(read_buf_),
         [this](const boost::system::error_code& ec, size_t len)
         {
             if (!ec) {

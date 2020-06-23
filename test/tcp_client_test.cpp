@@ -17,6 +17,10 @@ int main(int argc, char* argv[])
     client.start();
     client.write("toto\n");
     client.write("titi\n");
-    std::this_thread::sleep_for(std::chrono::seconds(10));
+    while (1) {
+        std::string buf;
+        if (client.read(buf))
+            std::cout << buf << std::endl;
+    }
     client.stop();
 }
