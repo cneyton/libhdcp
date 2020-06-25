@@ -42,10 +42,14 @@ class WTransfer: public Transfer
 public:
     virtual void submit();
 
+    void      set_buffer(std::string&& buf);
+    uint8_t * get_buffer() {return buf_.data();};
+
     bool in_progress() const {return in_progress_;};
     void put_on_hold()       {in_progress_ = false;};
 
 private:
+    std::array<uint8_t, max_transfer_size> buf_ {0};
     std::atomic_bool in_progress_ = false;
 };
 

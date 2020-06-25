@@ -44,6 +44,11 @@ void WTransfer::submit()
     in_progress_ = true;
 }
 
+void WTransfer::set_buffer(std::string&& buf)
+{
+    std::memcpy(buf_.begin(), buf.data(), buf.size());
+}
+
 UsbAsync::UsbAsync(common::Logger logger, int itfc_nb,
                    uint16_t vendor_id, uint16_t product_id,
                    uint8_t in_endoint, uint8_t out_endpoint):
@@ -125,10 +130,9 @@ bool UsbAsync::read(std::string& buf)
 
 void UsbAsync::fill_transfer(WTransfer& transfer, std::string&& buf)
 {
-    log_trace(logger_, "{:#x}",
-              fmt::join((uint8_t*)buf.data(), (uint8_t*)buf.data()+buf.length(), "|"));
+    transfer.set_buffer(std::forward<std::string>(buf));
     libusb_fill_bulk_transfer(transfer.get_libusb_transfer(), device_handle_,
-                              out_endpoit_, reinterpret_cast<uint8_t*>(buf.data()), buf.size(),
+                              out_endpoit_, transfer.get_buffer(), buf.size(),
                               &UsbAsync::write_cb, this, timeout_write);
 }
 
@@ -143,6 +147,10 @@ void UsbAsync::write_cb(libusb_transfer * transfer)
 {
     if (transfer->status != LIBUSB_TRANSFER_COMPLETED)
         throw hdcp::libusb_error(transfer->status);
+
+    log_trace(spdlog::get("hdcp"), "write cb: {:#x}",
+              fmt::join((uint8_t*)transfer->buffer,
+                        (uint8_t*)transfer->buffer + transfer->actual_length, "|"));
 
     UsbAsync * usb = (UsbAsync*)transfer->user_data;
     std::string buf;
