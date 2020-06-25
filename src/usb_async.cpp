@@ -148,11 +148,11 @@ void UsbAsync::write_cb(libusb_transfer * transfer)
     if (transfer->status != LIBUSB_TRANSFER_COMPLETED)
         throw hdcp::libusb_error(transfer->status);
 
-    log_trace(spdlog::get("hdcp"), "write cb: {:#x}",
+    UsbAsync * usb = (UsbAsync*)transfer->user_data;
+    log_trace(usb->get_logger(), "write cb: {:#x}",
               fmt::join((uint8_t*)transfer->buffer,
                         (uint8_t*)transfer->buffer + transfer->actual_length, "|"));
 
-    UsbAsync * usb = (UsbAsync*)transfer->user_data;
     std::string buf;
     if (usb->write_queue_.try_dequeue(buf)) {
         usb->fill_transfer(*(usb->wtransfer_), std::move(buf));
@@ -171,7 +171,7 @@ void UsbAsync::read_cb(libusb_transfer * transfer)
     if (transfer->status != LIBUSB_TRANSFER_COMPLETED)
         throw hdcp::libusb_error(transfer->status);
 
-    log_trace(spdlog::get("hdcp"), "read cb: {:#x}",
+    log_trace(usb->get_logger(), "read cb: {:#x}",
               fmt::join((uint8_t*)transfer->buffer,
                         (uint8_t*)transfer->buffer + transfer->actual_length, "|"));
 
