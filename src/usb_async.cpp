@@ -125,6 +125,8 @@ bool UsbAsync::read(std::string& buf)
 
 void UsbAsync::fill_transfer(WTransfer& transfer, std::string&& buf)
 {
+    log_trace(logger_, "{:#x}",
+              fmt::join((uint8_t*)buf.data(), (uint8_t*)buf.data()+buf.length(), "|"));
     libusb_fill_bulk_transfer(transfer.get_libusb_transfer(), device_handle_,
                               out_endpoit_, reinterpret_cast<uint8_t*>(buf.data()), buf.size(),
                               &UsbAsync::write_cb, this, timeout_write);
@@ -161,6 +163,10 @@ void UsbAsync::read_cb(libusb_transfer * transfer)
     if (transfer->status != LIBUSB_TRANSFER_COMPLETED)
         throw hdcp::libusb_error(transfer->status);
 
+    log_trace(spdlog::get("hdcp"), "read cb: {:#x}",
+              fmt::join((uint8_t*)transfer->buffer,
+                        (uint8_t*)transfer->buffer + transfer->actual_length, "|"));
+
     if (!usb->read_queue_.try_enqueue(std::string(transfer->buffer,
                                                   transfer->buffer + transfer->actual_length)))
         throw hdcp::transport_error("read queue full");
@@ -168,6 +174,7 @@ void UsbAsync::read_cb(libusb_transfer * transfer)
 
 void UsbAsync::run()
 {
+    rtransfer_curr_->submit();
     while (is_running()) {
         try {
             libusb_handle_events(ctx_);
