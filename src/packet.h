@@ -74,7 +74,6 @@ private:
     struct Header
     {
         uint16_t sop;
-
         uint8_t  ver;
         uint16_t len;
         Id       id;
@@ -116,7 +115,7 @@ private:
 
     friend std::ostream& operator<<(std::ostream& out, const Packet& p)
     {
-        out << fmt::format("\npacket {}, type={:#x}, with {} block(s) (prot ver:{}),\n",
+        out << fmt::format("\npacket {}, type={:#x}, with {} block(s) (prot ver:{})\n",
                            p.get_id(), p.get_type(), p.get_nb_block(), p.get_ver());
         int i = 0;
         for (auto& b: p.get_blocks()) {

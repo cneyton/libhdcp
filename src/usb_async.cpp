@@ -165,8 +165,10 @@ void UsbAsync::write_cb(libusb_transfer * transfer)
 void UsbAsync::read_cb(libusb_transfer * transfer)
 {
     UsbAsync * usb = (UsbAsync*)transfer->user_data;
+    RTransfer * tmp = usb->rtransfer_curr_;
     usb->rtransfer_curr_ = usb->rtransfer_prev_;
     usb->rtransfer_curr_->submit();
+    usb->rtransfer_prev_ = tmp;
 
     if (transfer->status != LIBUSB_TRANSFER_COMPLETED)
         throw hdcp::libusb_error(transfer->status);
