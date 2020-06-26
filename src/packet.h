@@ -115,13 +115,14 @@ private:
 
     friend std::ostream& operator<<(std::ostream& out, const Packet& p)
     {
-        out << fmt::format("\npacket {}, type={:#x}, with {} block(s) (prot ver:{})\n",
+        out << fmt::format("\npacket {}: type={:#x}, with {} block(s) (prot ver:{})\n",
                            p.get_id(), p.get_type(), p.get_nb_block(), p.get_ver());
         int i = 0;
         for (auto& b: p.get_blocks()) {
-            out << fmt::format("block {}, type {}, len {}\n\t",
-                               i++, b.type, b.data.length());
-            out << b.data << "\n";
+            out << fmt::format("\tblock {}: type {:#x}, len {} -> {:#x}\n",
+                               i++, b.type, b.data.length(),
+                               fmt::join((uint8_t*)b.data.data(),
+                                         (uint8_t*)b.data.data() + b.data.length(), "|"));
         }
         return out;
     }
