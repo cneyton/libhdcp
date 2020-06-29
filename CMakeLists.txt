@@ -25,8 +25,7 @@ endif()
 # build
 ################################################################################
 add_library(hdcp STATIC)
-
-target_sources(hdcp PUBLIC
+target_sources(hdcp PRIVATE
     src/usb_async.cpp
     src/tcp_server.cpp
     src/tcp_client.cpp
@@ -35,11 +34,12 @@ target_sources(hdcp PUBLIC
     src/slave.cpp
     src/master.cpp
     )
-target_include_directories(hdcp
-    PUBLIC
+target_include_directories(hdcp PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     )
-target_link_libraries(hdcp PUBLIC common usb-1.0)
+target_link_libraries(hdcp
+    PUBLIC  common
+    PRIVATE usb-1.0)
 target_compile_options(hdcp PUBLIC -Wall -Wextra)
 
 ################################################################################
