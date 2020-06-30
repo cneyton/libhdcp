@@ -112,7 +112,7 @@ void UsbAsync::write(std::string&& buf)
         throw hdcp::transport_error("not allowed to write when transport is stopped");
 
     if (wtransfer_->in_progress()) {
-        if (write_queue_.try_enqueue(std::forward<std::string>(buf)))
+        if (!write_queue_.try_enqueue(std::forward<std::string>(buf)))
             throw hdcp::transport_error("write queue full");
     } else {
         fill_transfer(*wtransfer_, std::forward<std::string>(buf));
