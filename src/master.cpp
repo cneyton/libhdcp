@@ -27,6 +27,8 @@ void Master::start()
 
 void Master::stop()
 {
+    if (!is_running())
+        return;
     common::Thread::stop();
     if (joinable())
         join();
