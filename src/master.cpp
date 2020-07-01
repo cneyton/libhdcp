@@ -50,6 +50,7 @@ void Master::send_command(Packet::BlockType id, const std::string& data, Request
 void Master::connect()
 {
     std::unique_lock<std::mutex> lk(mutex_connection_);
+    disconnection_requested_ = false;
     connection_requested_ = true;
     cv_connection_.notify_all();
 }
