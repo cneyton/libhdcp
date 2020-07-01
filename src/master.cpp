@@ -30,6 +30,8 @@ void Master::stop()
     if (!is_running())
         return;
     common::Thread::stop();
+    // wake-up in case we were waiting to connect
+    cv_connection_.notify_all();
     if (joinable())
         join();
     statemachine_.reinit();
@@ -187,5 +189,5 @@ void Master::run()
 void Master::wait_connection_request()
 {
     std::unique_lock<std::mutex> lk(mutex_connection_);
-    cv_connection_.wait(lk, [&]{return connection_requested_ ? true:false;});
+    cv_connection_.wait(lk);
 }
