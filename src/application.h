@@ -3,6 +3,8 @@
 #include <string>
 #include <chrono>
 
+#include "common/log.h"
+
 namespace hdcp
 {
 
@@ -23,6 +25,16 @@ struct Identification
     std::string serial_number;
     std::string hw_version;
     std::string sw_version;
+
+    friend std::ostream& operator<<(std::ostream& os, const Identification& id)
+    {
+        return os << fmt::format("identification :\n"
+                                 "\tname: {}\n"
+                                 "\tserial number: {}\n"
+                                 "\thardware version: {}\n"
+                                 "\tsoftware version: {}",
+                                 id.name, id.serial_number, id.hw_version, id.sw_version);
+    }
 };
 
 } /* namespace hdcp */

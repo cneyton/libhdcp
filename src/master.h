@@ -22,7 +22,7 @@ public:
     };
 
     Master(common::Logger logger, Transport* transport, DataCallback data_cb,
-                const Identification& host_id);
+           const Identification& host_id);
     virtual ~Master();
 
     State get_state() const {return statemachine_.get_state();};
@@ -81,6 +81,7 @@ private:
 
     virtual void run();
     void wait_connection_request();
+    void set_device_id(const Packet& p);
 };
 
 } /* namespace hdcp */

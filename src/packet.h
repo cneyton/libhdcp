@@ -19,6 +19,12 @@ public:
     using Id        = uint16_t;
     using BlockType = uint16_t;
 
+    // reserved block types
+    static const BlockType id_name          = 0x0001;
+    static const BlockType id_serial_number = 0x0002;
+    static const BlockType id_hw_version    = 0x0003;
+    static const BlockType id_sw_version    = 0x0004;
+
     struct Block
     {
         BlockType        type;
@@ -64,12 +70,6 @@ private:
 
     static const uint16_t sop = 0xCAFE;
     static const uint8_t  ver = 0x01;
-
-    // reserved block types
-    static const BlockType name          = 0x0001;
-    static const BlockType serial_number = 0x0002;
-    static const BlockType hw_version    = 0x0003;
-    static const BlockType sw_version    = 0x0004;
 
     struct Header
     {

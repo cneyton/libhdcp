@@ -106,6 +106,7 @@ int Master::handler_state_connecting_()
     log_trace(logger_, "{}", p);
     switch (p.get_type()) {
     case Packet::Type::dip:
+        set_device_id(p);
         dip_received_ = true;
         request_manager_.ack_dip();
         break;
@@ -191,4 +192,27 @@ void Master::wait_connection_request()
 {
     std::unique_lock<std::mutex> lk(mutex_connection_);
     cv_connection_.wait(lk);
+}
+
+void Master::set_device_id(const Packet& p)
+{
+    for (auto& b: p.get_blocks()) {
+        switch (b.type) {
+        case Packet::id_name:
+            device_id_.name = b.data;
+            break;
+        case Packet::id_serial_number:
+            device_id_.serial_number = b.data;
+            break;
+        case Packet::id_hw_version:
+            device_id_.hw_version = b.data;
+            break;
+        case Packet::id_sw_version:
+            device_id_.sw_version = b.data;
+            break;
+        default:
+            log_warn(logger_, "you should no received non-id block type ({:#x})", b.type);
+        }
+    }
+    log_debug(logger_, "device {}", device_id_);
 }
