@@ -33,6 +33,7 @@ public:
     bool wait_connected();
     void disconnect();
     void send_data(std::vector<Packet::Block>& blocks);
+    void send_cmd_ack(const Packet& packet);
 
 private:
     using common::Thread::start;

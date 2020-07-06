@@ -27,7 +27,7 @@ void RequestManager::send_command(Packet::BlockType type, const std::string& dat
     }
 }
 
-void RequestManager::send_cmd_ack(Packet& packet)
+void RequestManager::send_cmd_ack(const Packet& packet)
 {
     if (!transport_)
         throw hdcp::application_error("transport null pointer");

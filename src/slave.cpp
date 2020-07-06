@@ -145,7 +145,7 @@ int Slave::handler_state_connected_()
         connection_requested_ = true;
         break;
     case Packet::Type::cmd:
-        request_manager_.send_cmd_ack(p);
+        // The cb should send an ack if the cmd is well formated
         cmd_cb_(p);
         break;
     case Packet::Type::ka:
