@@ -78,6 +78,7 @@ private:
     CmdCallback                    cmd_cb_;
 
     virtual void run();
+    void set_master_id(const Packet& p);
 };
 
 } /* namespace hdcp */

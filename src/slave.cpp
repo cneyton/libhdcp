@@ -79,6 +79,7 @@ int Slave::handler_state_disconnected_()
     switch (p.get_type()) {
     case Packet::Type::hip:
         connection_requested_ = true;
+        set_master_id(p);
         request_manager_.start(1);
         request_manager_.send_dip(id_);
         request_manager_.start_slave_keepalive_management(keepalive_timeout);
@@ -186,4 +187,27 @@ void Slave::run()
             log_warn(logger_, e.what());
         }
     }
+}
+
+void Slave::set_master_id(const Packet& p)
+{
+    for (auto& b: p.get_blocks()) {
+        switch (b.type) {
+        case Packet::id_name:
+            master_id_.name = b.data;
+            break;
+        case Packet::id_serial_number:
+            master_id_.serial_number = b.data;
+            break;
+        case Packet::id_hw_version:
+            master_id_.hw_version = b.data;
+            break;
+        case Packet::id_sw_version:
+            master_id_.sw_version = b.data;
+            break;
+        default:
+            log_warn(logger_, "you should no received non-id block type ({:#x})", b.type);
+        }
+    }
+    log_debug(logger_, "master {}", master_id_);
 }
