@@ -6,7 +6,7 @@ using namespace hdcp;
 Master::Master(common::Logger logger, Transport* transport, DataCallback data_cb,
                          const Identification& host_id):
     common::Log(logger),
-    statemachine_(logger, "com", states_, State::disconnected),
+    statemachine_(logger, "com_master", states_, State::disconnected),
     transport_(transport), request_manager_(logger, transport),
     host_id_(host_id), data_cb_(data_cb)
 {
@@ -211,7 +211,9 @@ void Master::set_device_id(const Packet& p)
             device_id_.sw_version = b.data;
             break;
         default:
-            log_warn(logger_, "you should no received non-id block type ({:#x})", b.type);
+            log_warn(logger_,
+                     "you should not received this block type ({:#x}) in an identifation packet",
+                     b.type);
         }
     }
     log_debug(logger_, "device {}", device_id_);

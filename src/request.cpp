@@ -185,7 +185,7 @@ void RequestManager::cmd_timeout_cb(common::TimeoutQueue::Id id, int64_t)
 
 void RequestManager::ka_timeout_cb(common::TimeoutQueue::Id, int64_t)
 {
-    log_warn(logger_, "keeaplive timeout");
+    log_warn(logger_, "keepalive timeout");
     ka_timeout_flag_ = true;
 }
 

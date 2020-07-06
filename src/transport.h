@@ -1,5 +1,4 @@
-#ifndef TRANSPORT_H
-#define TRANSPORT_H
+#pragma once
 
 #include <chrono>
 #include <string>
@@ -26,8 +25,9 @@ public:
     virtual bool read(std::string& buf)        = 0;
     virtual void start()                       = 0;
     virtual void stop()                        = 0;
+
+    /* TODO: add open_ flag  <03-07-20, cneyton> */
+    //bool is_open() {return open_};
 };
 
 } /* namespace hdcp */
-
-#endif /* TRANSPORT_H */
