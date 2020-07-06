@@ -27,6 +27,8 @@ void Slave::start()
 
 void Slave::stop()
 {
+    if (!is_running())
+        return;
     common::Thread::stop();
     if (joinable())
         join();
