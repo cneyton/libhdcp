@@ -66,6 +66,7 @@ public:
     static Packet make_dip(Id id, const hdcp::Identification& dev_id);
 
 private:
+    friend std::ostream& operator<<(std::ostream& out, const Packet& p);
     using Crc = uint16_t;
 
     static const uint16_t sop = 0xCAFE;
@@ -112,20 +113,6 @@ private:
     }
 
     void validate_packet() const;
-
-    friend std::ostream& operator<<(std::ostream& out, const Packet& p)
-    {
-        out << fmt::format("\npacket {}: type={:#x}, with {} block(s) (prot ver:{})\n",
-                           p.get_id(), p.get_type(), p.get_nb_block(), p.get_ver());
-        int i = 0;
-        for (auto& b: p.get_blocks()) {
-            out << fmt::format("\tblock {}: type {:#x}, len {} -> {:#x}\n",
-                               i++, b.type, b.data.length(),
-                               fmt::join((uint8_t*)b.data.data(),
-                                         (uint8_t*)b.data.data() + b.data.length(), "|"));
-        }
-        return out;
-    }
 };
 
 } /* namespace hdcp */
