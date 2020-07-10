@@ -193,6 +193,9 @@ void Packet::validate_packet() const
 
     if (h->p_crc != compute_pcrc())
         throw hdcp::packet_error("wrong payload crc");
+
+    if (h->n_block != get_blocks().size())
+        throw hdcp::packet_error("wrong number of blocks");
 }
 
 std::vector<Packet::Block> Packet::get_blocks() const
@@ -201,9 +204,11 @@ std::vector<Packet::Block> Packet::get_blocks() const
 
     std::vector<Block> blocks;
     auto it = payload.begin();
-    while (it != payload.end()) {
+    while (it + sizeof(BHeader) <= payload.end()) {
         const BHeader * header = reinterpret_cast<const BHeader*>(it);
         it += sizeof(Packet::BHeader);
+        if (it + header->len > payload.end())
+            throw hdcp::packet_error("wrong block length");
         Block b = {
             .type = header->type,
             .data = std::string_view(it, header->len),
