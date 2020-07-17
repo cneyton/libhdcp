@@ -45,6 +45,11 @@ void Slave::send_data(std::vector<Packet::Block>& blocks)
     request_manager_.send_data(blocks);
 }
 
+void Slave::send_cmd_ack(const Packet& packet)
+{
+    request_manager_.send_cmd_ack(packet);
+}
+
 bool Slave::wait_connected()
 {
     std::unique_lock<std::mutex> lk(mutex_connecting_);
