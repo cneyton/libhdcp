@@ -27,11 +27,13 @@ private:
 class RTransfer: public Transfer
 {
 public:
+    RTransfer(libusb_device_handle * device_handle);
+    virtual ~RTransfer();
 
-    uint8_t * get_buffer() {return buf_.data();};
+    uint8_t * get_buffer() const {return buf_;};
 
 private:
-    std::array<uint8_t, max_transfer_size> buf_ {0};
+    uint8_t * buf_ = nullptr;
     libusb_device_handle * device_handle_ = nullptr;
 };
 
