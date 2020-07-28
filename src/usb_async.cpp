@@ -24,20 +24,6 @@ void Transfer::submit()
         throw hdcp::libusb_error(ret);
 }
 
-RTransfer::RTransfer(libusb_device_handle * device_handle): device_handle_(device_handle)
-{
-    if (!device_handle)
-        throw::transport_error("device handle nullptr");
-
-    if (!(buf_ = libusb_dev_mem_alloc(device_handle, max_transfer_size)))
-        throw std::bad_alloc();
-}
-
-RTransfer::~RTransfer()
-{
-    libusb_dev_mem_free(device_handle_, buf_, max_transfer_size);
-}
-
 void WTransfer::submit()
 {
     Transfer::submit();
@@ -78,8 +64,8 @@ void UsbAsync::open()
         throw hdcp::libusb_error(ret);
 
     wtransfer_      = new WTransfer();
-    rtransfer_curr_ = new RTransfer(device_handle_);
-    rtransfer_prev_ = new RTransfer(device_handle_);
+    rtransfer_curr_ = new RTransfer();
+    rtransfer_prev_ = new RTransfer();
     fill_transfer(*rtransfer_curr_);
     fill_transfer(*rtransfer_prev_);
 }
