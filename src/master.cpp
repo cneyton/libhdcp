@@ -22,7 +22,7 @@ void Master::start()
 {
     if (is_running())
         return;
-    common::Thread::start(0);
+    common::Thread::start(true);
 }
 
 void Master::stop()
@@ -58,8 +58,7 @@ void Master::connect()
 bool Master::wait_connected()
 {
     std::unique_lock<std::mutex> lk(mutex_connecting_);
-    cv_connecting_.wait(lk, [&]{State s = statemachine_.get_state();
-                        return (s == State::disconnected || s == State::connected) ? true:false;});
+    cv_connecting_.wait(lk);
     return statemachine_.get_state() == State::connected;
 }
 
@@ -79,6 +78,9 @@ int Master::handler_state_disconnected_()
         // notify connection attempt failed
         std::unique_lock<std::mutex> lk(mutex_connecting_);
         cv_connecting_.notify_all();
+        // notify thread running for first start
+        /* TODO: maybe use an init state  <24-07-20, cneyton> */
+        notify_running(0);
         // need to return here to not wait when stopping
         return 0;
     }
