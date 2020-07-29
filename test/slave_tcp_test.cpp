@@ -26,6 +26,8 @@ int main(int argc, char* argv[])
 
     server.start();
     slave.start();
+    slave.wait_connected();
+    log_info(logger, "stop after 1000s");
     std::this_thread::sleep_for(std::chrono::seconds(1000));
     slave.stop();
     server.stop();
