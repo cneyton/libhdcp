@@ -50,12 +50,10 @@ void Slave::send_cmd_ack(const Packet& packet)
     request_manager_.send_cmd_ack(packet);
 }
 
-bool Slave::wait_connected()
+void Slave::wait_connected()
 {
     std::unique_lock<std::mutex> lk(mutex_connecting_);
-    cv_connecting_.wait(lk, [&]{State s = statemachine_.get_state();
-                        return (s == State::disconnected || s == State::connected) ? true:false;});
-    return statemachine_.get_state() == State::connected;
+    cv_connecting_.wait(lk, [&]{return statemachine_.get_state() == State::connected;});
 }
 
 void Slave::disconnect()
