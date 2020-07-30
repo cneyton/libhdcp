@@ -31,6 +31,7 @@ private:
     std::string                  host_;
     std::string                  service_;
     std::array<char, max_transfer_size> read_buf_ = {0};
+   /* TODO: use concurrent queue + init queue in ctor with max elt <30-07-20, cneyton> */
     common::ReaderWriterQueue<std::string>         write_queue_;
     common::BlockingReaderWriterQueue<std::string> read_queue_;
 

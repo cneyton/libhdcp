@@ -3,6 +3,7 @@
 #include <boost/asio.hpp>
 
 #include "common/thread.h"
+#include "common/concurrentqueue.h"
 #include "common/readerwriterqueue.h"
 
 #include "transport.h"
@@ -38,7 +39,10 @@ private:
     boost::asio::ip::tcp::acceptor acceptor_;
 
     std::array<char, max_transfer_size> read_buf_ = {0};
-    common::ReaderWriterQueue<std::string>         write_queue_;
+    std::string                         write_buf_;
+    std::atomic_bool write_in_progress_ = false;
+
+    common::ConcurrentQueue<std::string>           write_queue_;
     common::BlockingReaderWriterQueue<std::string> read_queue_;
 
     void do_read();

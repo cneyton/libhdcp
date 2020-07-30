@@ -5,8 +5,10 @@ using namespace hdcp;
 TcpServer::TcpServer(common::Logger logger, uint16_t port):
     common::Log(logger),
     io_context_(), socket_(io_context_),
-    acceptor_(io_context_, boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v4(), port))
+    acceptor_(io_context_, boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v4(), port)),
+    write_queue_(max_queue_size), read_queue_(max_queue_size)
 {
+    write_buf_.reserve(max_transfer_size);
     acceptor_.set_option(boost::asio::ip::tcp::acceptor::reuse_address(true));
 }
 
@@ -48,9 +50,10 @@ void TcpServer::close()
     boost::asio::post(io_context_,
         [this] ()
         {
+            std::string s;
             // empty queues
             while (read_queue_.pop()) {}
-            while (write_queue_.pop()) {}
+            while (write_queue_.try_dequeue(s)) {}
             // close socket
             socket_.close();
         });
@@ -69,12 +72,9 @@ void TcpServer::write(std::string&& buf)
     boost::asio::post(io_context_,
                       [this, buf] ()
                       {
-                          bool write_in_progress = false;
-                          if (write_queue_.peek())
-                              write_in_progress = true;
                           if (!write_queue_.try_enqueue(buf))
                               throw hdcp::transport_error("write queue full");
-                          if (!write_in_progress)
+                          if (!write_in_progress_)
                               do_write();
                       });
 }
@@ -114,16 +114,17 @@ void TcpServer::do_read()
 
 void TcpServer::do_write()
 {
-    if (!write_queue_.peek())
+    if (!write_queue_.try_dequeue(write_buf_))
         return;
-    boost::asio::async_write(socket_, boost::asio::buffer(*write_queue_.peek()),
+    write_in_progress_ = true;
+    boost::asio::async_write(socket_, boost::asio::buffer(write_buf_),
         [this](const boost::system::error_code& ec, size_t /* length */)
         {
             if (!ec) {
-                if (!write_queue_.pop())
-                    throw hdcp::transport_error("queue shouldn't be empty");
-                if (write_queue_.peek())
+                if (write_queue_.size_approx() > 0)
                     do_write();
+                else
+                    write_in_progress_ = false;
             } else {
                 throw asio_error(ec);
             }

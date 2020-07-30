@@ -53,7 +53,8 @@ UsbAsync::UsbAsync(common::Logger logger, int itfc_nb,
                    uint16_t vendor_id, uint16_t product_id,
                    uint8_t in_endoint, uint8_t out_endpoint):
     common::Log(logger), itfc_nb_(itfc_nb), vendor_id_(vendor_id), product_id_(product_id),
-    in_endoint_(in_endoint), out_endpoit_(out_endpoint)
+    in_endoint_(in_endoint), out_endpoit_(out_endpoint), write_queue_(max_queue_size),
+    read_queue_(max_queue_size)
 {
     int ret;
     if ((ret = libusb_init(&ctx_)) < 0)
