@@ -190,13 +190,14 @@ void Packet::validate_packet() const
 
     uint16_t len = data_.size() - sizeof(Packet::Header);
     if (h->len != len)
-        throw hdcp::packet_error(fmt::format("wrong payload length: {} != {}", h->len, len));
+        throw hdcp::packet_error(fmt::format("wrong payload length: received {}, should be {}", len, h->len));
 
     if (h->p_crc != compute_pcrc())
         throw hdcp::packet_error("wrong payload crc");
 
     if (h->n_block != get_blocks().size())
-        throw hdcp::packet_error("wrong number of blocks");
+        throw hdcp::packet_error(fmt::format("wrong number of blocks: received {}, should be {}",
+                                             get_blocks().size(), h->n_block));
 }
 
 std::vector<Packet::Block> Packet::get_blocks() const
