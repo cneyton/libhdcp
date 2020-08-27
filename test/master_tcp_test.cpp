@@ -7,7 +7,7 @@ using namespace hdcp;
 
 static void data_cb(const Packet&)
 {
-    std::cout << "data received" << std::endl;
+    //std::this_thread::sleep_for(std::chrono::milliseconds(1));
 }
 
 int main(int argc, char* argv[])
@@ -17,7 +17,7 @@ int main(int argc, char* argv[])
         exit(EXIT_FAILURE);
     }
     common::Logger logger(spdlog::stdout_color_mt("hdcp"));
-    logger->set_level(spdlog::level::trace);
+    logger->set_level(spdlog::level::debug);
 
     Identification id ("client", "0001", "0.0.01", "0.1.02");
     TcpClient client(logger, argv[1], argv[2]);

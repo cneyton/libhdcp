@@ -16,7 +16,7 @@ int main(int argc, char* argv[])
         exit(EXIT_FAILURE);
     }
     common::Logger logger(spdlog::stdout_color_mt("hdcp"));
-    logger->set_level(spdlog::level::trace);
+    logger->set_level(spdlog::level::debug);
 
     Identification id ("server", "0001", "0.0.01", "0.1.02");
     uint16_t port = std::stoi(argv[1]);
@@ -26,8 +26,17 @@ int main(int argc, char* argv[])
     server.start();
     slave.start();
     slave.wait_connected();
-    log_info(logger, "stop after 1000s");
-    std::this_thread::sleep_for(std::chrono::seconds(1000));
+    std::string data(1000, 'a');
+    std::vector<hdcp::Packet::Block> blocks = {
+        {
+            .type = 0x2854,
+            .data = data
+        }
+    };
+    for (int i=0; i<20000; i++) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        slave.send_data(blocks);
+    }
     slave.stop();
     server.stop();
 }
