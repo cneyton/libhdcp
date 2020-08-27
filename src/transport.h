@@ -3,8 +3,7 @@
 #include <chrono>
 #include <string>
 
-namespace hdcp
-{
+namespace hdcp {
 
 constexpr std::size_t max_transfer_size = 2048;
 constexpr std::size_t max_queue_size    = 100;
@@ -26,9 +25,10 @@ public:
     virtual bool read(std::string& buf)        = 0;
     virtual void start()                       = 0;
     virtual void stop()                        = 0;
+    bool is_open() {return open_;};
 
-    /* TODO: add open_ flag  <03-07-20, cneyton> */
-    //bool is_open() {return open_};
+private:
+    bool open_ = false;
 };
 
 } /* namespace hdcp */

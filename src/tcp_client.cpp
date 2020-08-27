@@ -3,10 +3,9 @@
 using namespace hdcp;
 
 TcpClient::TcpClient(common::Logger logger, std::string_view host, std::string_view service):
-        Log(logger),
-        io_context_(), socket_(io_context_),
-        host_(host), service_(service),
-        write_queue_(100), read_queue_(100)
+    Log(logger),
+    io_context_(), socket_(io_context_), host_(host), service_(service),
+    write_queue_(max_queue_size), read_queue_(max_queue_size)
 {
 }
 

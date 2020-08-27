@@ -7,7 +7,6 @@ using namespace hdcp;
 
 static void cmd_cb(const Packet&)
 {
-    std::cout << "data received" << std::endl;
 }
 
 int main(int argc, char* argv[])

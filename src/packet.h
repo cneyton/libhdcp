@@ -10,8 +10,7 @@
 #include "transport.h"
 #include "application.h"
 
-namespace hdcp
-{
+namespace hdcp {
 
 class Packet
 {
