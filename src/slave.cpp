@@ -75,13 +75,12 @@ int Slave::handler_state_disconnected_()
     if (!transport_)
         throw hdcp::application_error("transport null pointer");
 
-    std::string buf;
-    if (!transport_->read(buf))
+    Packet p;
+    if (!transport_->read(p))
         return 0;
 
-    Packet p(std::move(buf));
     log_trace(logger_, "{}", p);
-    switch (p.get_type()) {
+    switch (p.type()) {
     case Packet::Type::hip:
         connection_requested_ = true;
         set_master_id(p);
@@ -106,13 +105,12 @@ int Slave::handler_state_connecting_()
     if (!transport_)
         throw hdcp::application_error("transport null pointer");
 
-    std::string buf;
-    if (!transport_->read(buf))
+    Packet p;
+    if (!transport_->read(p))
         return 0;
 
-    Packet p(std::move(buf));
     log_trace(logger_, "{}", p);
-    switch (p.get_type()) {
+    switch (p.type()) {
     case Packet::Type::ka:
         request_manager_.keepalive();
         ka_received_ = true;
@@ -137,13 +135,12 @@ int Slave::handler_state_connected_()
     if (!transport_)
         throw hdcp::application_error("transport null pointer");
 
-    std::string buf;
-    if (!transport_->read(buf))
+    Packet p;
+    if (!transport_->read(p))
         return 0;
 
-    Packet p(std::move(buf));
     log_trace(logger_, "{}", p);
-    switch (p.get_type()) {
+    switch (p.type()) {
     case Packet::Type::hip:
         connection_requested_ = true;
         break;
@@ -156,7 +153,7 @@ int Slave::handler_state_connected_()
         break;
     default:
         log_warn(logger_,
-                 "you should not receive this packet type ({:#x}) while connected", p.get_type());
+                 "you should not receive this packet type ({:#x}) while connected", p.type());
         break;
     }
 
@@ -196,7 +193,7 @@ void Slave::run()
 
 void Slave::set_master_id(const Packet& p)
 {
-    for (auto& b: p.get_blocks()) {
+    for (auto& b: p.blocks()) {
         switch (b.type) {
         case Packet::id_name:
             master_id_.name = b.data;

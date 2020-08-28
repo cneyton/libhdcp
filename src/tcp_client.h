@@ -5,6 +5,7 @@
 
 #include "transport.h"
 #include "hdcp/exception.h"
+#include "packet.h"
 
 namespace hdcp
 {
@@ -16,9 +17,7 @@ public:
 
     virtual ~TcpClient();
 
-    virtual void write(const std::string& buf);
-    virtual void write(std::string&& buf);
-    virtual bool read(std::string& buf);
+    virtual void write(Packet&&);
     virtual void stop();
     virtual void start();
     bool is_open() {return socket_.is_open();};
@@ -30,16 +29,17 @@ private:
     boost::asio::ip::tcp::socket socket_;
     std::string                  host_;
     std::string                  service_;
-    std::array<char, max_transfer_size> read_buf_ = {0};
-   /* TODO: use concurrent queue + init queue in ctor with max elt <30-07-20, cneyton> */
-    common::ReaderWriterQueue<std::string>         write_queue_;
-    common::BlockingReaderWriterQueue<std::string> read_queue_;
+
+    Packet read_packet_;
+    Packet write_packet_;
+    std::atomic_bool write_in_progress_ = false;
 
     void open();
     void close();
 
-    void do_read();
     void do_write();
+    void read_header();
+    void read_payload();
 
     virtual void run();
 };

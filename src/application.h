@@ -5,8 +5,7 @@
 
 #include "common/log.h"
 
-namespace hdcp
-{
+namespace hdcp {
 
 constexpr std::chrono::milliseconds connecting_timeout_(1000);
 constexpr std::chrono::milliseconds command_timeout_(1000);

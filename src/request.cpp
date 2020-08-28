@@ -16,13 +16,12 @@ void RequestManager::send_command(Packet::BlockType type, const std::string& dat
 
     // send command
     Packet cmd = Packet::make_command(++packet_id_, type, data);
-    transport_->write(cmd.get_data());
+    transport_->write(cmd);
 
     // add request to the set
     {
         std::unique_lock<std::mutex> lk(requests_mutex_);
-        const auto [it, success] = requests_.insert({id, cmd, std::move(request_cb)});
-        if (!success)
+        if (!requests_.insert({id, cmd, std::move(request_cb)}).second)
             throw hdcp::application_error("a request with the same packet id is pending");
     }
 }
@@ -33,10 +32,7 @@ void RequestManager::send_cmd_ack(const Packet& packet)
         throw hdcp::application_error("transport null pointer");
 
     // send command ack
-    Packet cmd_ack = Packet::make_cmd_ack(++packet_id_, packet.get_blocks().at(0).type,
-                                          packet.get_id());
-    transport_->write(cmd_ack.get_data());
-
+    transport_->write(Packet::make_cmd_ack(++packet_id_, packet.blocks().at(0).type, packet.id()));
 }
 
 void RequestManager::send_data(std::vector<Packet::Block>& blocks)
@@ -45,8 +41,7 @@ void RequestManager::send_data(std::vector<Packet::Block>& blocks)
         throw hdcp::application_error("transport null pointer");
 
     // send data
-    Packet data = Packet::make_data(++packet_id_, blocks);
-    transport_->write(data.get_data());
+    transport_->write(Packet::make_data(++packet_id_, blocks));
 }
 
 void RequestManager::send_hip(const Identification& id, std::chrono::milliseconds timeout)
@@ -55,8 +50,7 @@ void RequestManager::send_hip(const Identification& id, std::chrono::millisecond
         throw hdcp::application_error("transport null pointer");
     dip_timeout_flag_ = false;
     // send hip
-    Packet hip = Packet::make_hip(++packet_id_, id);
-    transport_->write(hip.get_data());
+    transport_->write(Packet::make_hip(++packet_id_, id));
     // set timeout
     dip_id_ = timeout_queue_.add(now_, timeout.count()/time_base_ms.count(),
                                  std::bind(&RequestManager::dip_timeout_cb, this,
@@ -68,8 +62,7 @@ void RequestManager::send_dip(const Identification& id)
     if (!transport_)
         throw hdcp::application_error("transport null pointer");
     // send dip
-    Packet dip = Packet::make_dip(++packet_id_, id);
-    transport_->write(dip.get_data());
+    transport_->write(Packet::make_dip(++packet_id_, id));
 }
 
 void RequestManager::start_master_keepalive_management(std::chrono::milliseconds keepalive_interval,
@@ -83,8 +76,7 @@ void RequestManager::start_master_keepalive_management(std::chrono::milliseconds
                                      std::bind(&RequestManager::ka_mngt_timeout_cb, this,
                                                std::placeholders::_1, std::placeholders::_2));
     // send keepalive
-    Packet ka = Packet::make_keepalive(++packet_id_);
-    transport_->write(ka.get_data());
+    transport_->write(Packet::make_keepalive(++packet_id_));
     // set timeout
     timeout_keepalive_ = keepalive_timeout.count()/time_base_ms.count();
     keepalive_id_ = timeout_queue_.add(now_, timeout_keepalive_,
@@ -118,7 +110,7 @@ void RequestManager::ack_command(Packet& packet)
 {
     // get the first block, it should have the same block type of cmd sent
     // and the data should correspond to its packet id
-    auto block = packet.get_blocks().at(0);
+    auto block = packet.blocks().at(0);
     if (block.data.size() != sizeof(Packet::Id))
         throw hdcp::application_error("first block of cmd ack should contain a packet id");
     const Packet::Id id = *reinterpret_cast<const Packet::Id*>(block.data.data());
@@ -134,7 +126,7 @@ void RequestManager::ack_command(Packet& packet)
     r.call_callback();
 
     timeout_queue_.erase(r.get_id());
-    set_by_command.erase(packet.get_id());
+    set_by_command.erase(packet.id());
 }
 
 void RequestManager::ack_keepalive()
@@ -149,8 +141,7 @@ void RequestManager::keepalive()
                                        std::bind(&RequestManager::ka_timeout_cb, this,
                                                  std::placeholders::_1, std::placeholders::_2));
     // send keepalive ack
-    Packet p = Packet::make_keepalive_ack(++packet_id_);
-    transport_->write(p.get_data());
+    transport_->write(Packet::make_keepalive_ack(++packet_id_));
 }
 
 void RequestManager::ack_dip()
@@ -167,14 +158,14 @@ void RequestManager::cmd_timeout_cb(common::TimeoutQueue::Id id, int64_t)
         throw hdcp::application_error("request id not found, you should not be here");
 
     if (search->get_retry() <= max_retry_) {
-        log_warn(logger_, "command {} timeout, try = {}", search->get_command().get_id(),
+        log_warn(logger_, "command {} timeout, try = {}", search->get_command().id(),
                  search->get_retry());
         set_by_request.modify(search, std::bind(&Request::inc_retry, *search));
         if (!transport_)
             throw hdcp::application_error("transport null pointer");
-        transport_->write(search->get_command().get_data());
+        transport_->write(search->get_command());
     } else {
-        log_error(logger_, "command {} failed", search->get_command().get_id());
+        log_error(logger_, "command {} failed", search->get_command().id());
         Request r(*search);
         r.set_status(Request::Status::timeout);
         r.call_callback();
@@ -201,8 +192,7 @@ void RequestManager::ka_mngt_timeout_cb(common::TimeoutQueue::Id, int64_t)
         throw hdcp::application_error("transport null pointer");
 
     // send keepalive
-    Packet ka = Packet::make_keepalive(++packet_id_);
-    transport_->write(ka.get_data());
+    transport_->write(Packet::make_keepalive(++packet_id_));
     keepalive_id_ = timeout_queue_.add(now_, timeout_keepalive_,
                                        std::bind(&RequestManager::ka_timeout_cb, this,
                                                  std::placeholders::_1, std::placeholders::_2));

@@ -5,10 +5,8 @@ using namespace hdcp;
 TcpServer::TcpServer(common::Logger logger, uint16_t port):
     common::Log(logger),
     io_context_(), socket_(io_context_),
-    acceptor_(io_context_, boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v4(), port)),
-    write_queue_(max_queue_size), read_queue_(max_queue_size)
+    acceptor_(io_context_, boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v4(), port))
 {
-    write_buf_.reserve(max_transfer_size);
     acceptor_.set_option(boost::asio::ip::tcp::acceptor::reuse_address(true));
 }
 
@@ -40,7 +38,7 @@ void TcpServer::open()
         {
             if (!ec) {
                 log_debug(logger_, "connection accepted");
-                do_read();
+                read_header();
             }
         });
 }
@@ -50,41 +48,25 @@ void TcpServer::close()
     boost::asio::post(io_context_,
         [this] ()
         {
-            std::string s;
-            // empty queues
-            while (read_queue_.pop()) {}
-            while (write_queue_.try_dequeue(s)) {}
+            clear_queues();
             // close socket
             socket_.close();
         });
 }
 
-void TcpServer::write(const std::string& buf)
-{
-    write(std::string(buf));
-}
-
-void TcpServer::write(std::string&& buf)
+void TcpServer::write(Packet&& p)
 {
     if (!is_running())
         throw hdcp::transport_error("not allowed to write when transport is stopped");
 
     boost::asio::post(io_context_,
-                      [this, buf] ()
-                      {
-                          if (!write_queue_.try_enqueue(buf))
-                              throw hdcp::transport_error("write queue full");
-                          if (!write_in_progress_)
-                              do_write();
-                      });
-}
-
-bool TcpServer::read(std::string& buf)
-{
-    if (!is_running())
-        throw hdcp::transport_error("not allowed to read when transport is stopped");
-
-    return read_queue_.wait_dequeue_timed(buf, time_base_ms);
+        [this, p] ()
+        {
+            if (!write_queue_.try_enqueue(p))
+                throw hdcp::transport_error("write queue full");
+            if (!write_in_progress_)
+                do_write();
+        });
 }
 
 void TcpServer::run()
@@ -98,14 +80,45 @@ void TcpServer::run()
     }
 }
 
-void TcpServer::do_read()
+void TcpServer::read_header()
 {
-    socket_.async_receive(boost::asio::buffer(read_buf_),
-        [this](const boost::system::error_code& ec, size_t len)
+    auto h = read_packet_.header_view();
+    boost::asio::async_read(socket_,
+                            boost::asio::buffer(const_cast<char*>(h.data()), h.size()),
+        [this](const boost::system::error_code& ec, size_t)
         {
             if (!ec) {
-                read_queue_.enqueue(std::string(read_buf_.begin(), len));
-                do_read();
+
+                read_payload();
+            } else {
+                throw asio_error(ec);
+            }
+        });
+}
+
+void TcpServer::read_payload()
+{
+    try {
+        read_packet_.parse_header();
+    } catch (hdcp::packet_error& e) {
+        log_error(logger_, "{}", e.what());
+        read_header();
+    }
+
+    auto pl = read_packet_.payload();
+    boost::asio::async_read(socket_,
+                            boost::asio::buffer(const_cast<char*>(pl.data()), pl.size()),
+        [this](const boost::system::error_code& ec, size_t)
+        {
+            if (!ec) {
+                try {
+                    read_packet_.parse_payload();
+                    if (!read_queue_.try_enqueue(read_packet_))
+                        throw hdcp::transport_error("read queue full");
+                } catch (std::exception& e) {
+                    log_error(logger_, "{}", e.what());
+                }
+                read_header();
             } else {
                 throw asio_error(ec);
             }
@@ -114,11 +127,12 @@ void TcpServer::do_read()
 
 void TcpServer::do_write()
 {
-    if (!write_queue_.try_dequeue(write_buf_))
+    if (!write_queue_.try_dequeue(write_packet_))
         return;
     write_in_progress_ = true;
-    boost::asio::async_write(socket_, boost::asio::buffer(write_buf_),
-        [this](const boost::system::error_code& ec, size_t /* length */)
+    boost::asio::async_write(socket_,
+                             boost::asio::buffer(write_packet_.data(), write_packet_.size()),
+        [this](const boost::system::error_code& ec, size_t)
         {
             if (!ec) {
                 if (write_queue_.size_approx() > 0)

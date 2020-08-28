@@ -1,13 +1,11 @@
 #pragma once
 
 #include <cstdint>
-#include <string>
 #include <string_view>
 #include <vector>
 
 #include "common/log.h"
 
-#include "transport.h"
 #include "application.h"
 
 namespace hdcp {
@@ -17,6 +15,8 @@ class Packet
 public:
     using Id        = uint16_t;
     using BlockType = uint16_t;
+
+    static const size_t max_size = 2048;
 
     // reserved block types
     static const BlockType id_name          = 0x0001;
@@ -41,20 +41,29 @@ public:
         data    = 0x44, // data
     };
 
-    Packet(const std::string&);
-    Packet(std::string&&);
-    Packet(const Packet&);
-    Packet(Packet&&);
-    Packet& operator=(const Packet&);
-    virtual ~Packet();
+    Packet(std::string_view);
+    Packet()                         = default;
+    Packet(const Packet&)            = default;
+    Packet& operator=(const Packet&) = default;
+    Packet(Packet&&)                 = default;
+    Packet& operator=(Packet&&)      = default;
 
-    Id      get_id()       const {return get_header()->id;};
-    uint8_t get_ver()      const {return get_header()->ver;};
-    Type    get_type()     const {return get_header()->type;};
-    uint8_t get_nb_block() const {return get_header()->n_block;}
+    Id       id()       const {return header()->id;}
+    uint8_t  version()  const {return header()->ver;}
+    Type     type()     const {return header()->type;}
+    uint8_t  nb_block() const {return header()->n_block;}
+    size_t   size()     const {return payload().size() + sizeof(Header);}
+    char *   data()           {return data_.data();}
+    const char * data() const {return data_.data();}
+    std::vector<Block> blocks()    const {return blocks(payload());};
+    std::string_view header_view() const {return std::string_view(data_.data(), sizeof(Header));};
+    std::string_view payload() const
+    {
+        return std::string_view(data_.data() + sizeof(Packet::Header), header()->len);
+    }
 
-    std::vector<Block> get_blocks() const;
-    const std::string& get_data() const {return data_;};
+    void parse_header() const;
+    void parse_payload() const;
 
     static Packet make_command(Id, BlockType, const std::string&);
     static Packet make_cmd_ack(Id, BlockType, Id);
@@ -89,29 +98,21 @@ private:
         uint16_t  len;
     }__attribute__((packed));
 
-
-    static Crc compute_crc(std::string_view data);
-    Crc compute_hcrc() const;
-    Crc compute_pcrc() const;
-
+    static Crc compute_crc(std::string_view);
     static std::string make_header(Id id, Type type, uint8_t n_block, const std::string& payload);
     static std::string make_block(BlockType type, const std::string& data);
     static std::string make_block(Block& b);
+    static std::vector<Block> blocks(std::string_view);
 
-    std::string data_;
-
-    const Header * get_header() const
+    const Header * header() const
     {
-         return reinterpret_cast<const Header*>(data_.data());
+        return reinterpret_cast<const Header*>(data_.data());
     }
 
-    std::string_view get_payload() const
-    {
-        return std::string_view(data_.data() + sizeof(Packet::Header),
-                                data_.size() - sizeof(Packet::Header));
-    }
+    static const Header * parse_header(std::string_view);
+    static void parse_payload(std::string_view, const Header *);
 
-    void validate_packet() const;
+    std::array<char, max_size> data_;
 };
 
 } /* namespace hdcp */

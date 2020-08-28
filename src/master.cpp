@@ -100,13 +100,12 @@ int Master::handler_state_connecting_()
     if (!transport_)
         throw hdcp::application_error("transport null pointer");
 
-    std::string buf;
-    if (!transport_->read(buf))
+    Packet p;
+    if (!transport_->read(p))
         return 0;
 
-    Packet p(std::move(buf));
     log_trace(logger_, "{}", p);
-    switch (p.get_type()) {
+    switch (p.type()) {
     case Packet::Type::dip:
         set_device_id(p);
         dip_received_ = true;
@@ -133,13 +132,12 @@ int Master::handler_state_connected_()
     if (!transport_)
         throw hdcp::application_error("transport null pointer");
 
-    std::string buf;
-    if (!transport_->read(buf))
+    Packet p;
+    if (!transport_->read(p))
         return 0;
 
-    Packet p(std::move(buf));
     log_trace(logger_, "{}", p);
-    switch (p.get_type()) {
+    switch (p.type()) {
     case Packet::Type::cmd_ack:
         request_manager_.ack_command(p);
         break;
@@ -151,7 +149,7 @@ int Master::handler_state_connected_()
         break;
     default:
         log_warn(logger_,
-                 "you should not receive this packet type ({:#x}) while connected", p.get_type());
+                 "you should not receive this packet type ({:#x}) while connected", p.type());
         break;
     }
 
@@ -198,7 +196,7 @@ void Master::wait_connection_request()
 
 void Master::set_device_id(const Packet& p)
 {
-    for (auto& b: p.get_blocks()) {
+    for (auto& b: p.blocks()) {
         switch (b.type) {
         case Packet::id_name:
             device_id_.name = b.data;

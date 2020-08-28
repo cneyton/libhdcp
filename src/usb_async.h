@@ -8,8 +8,7 @@
 
 #include "transport.h"
 
-namespace hdcp
-{
+namespace hdcp {
 
 class Transfer
 {
@@ -42,14 +41,14 @@ class WTransfer: public Transfer
 public:
     virtual void submit();
 
-    void      set_buffer(std::string&& buf);
-    uint8_t * get_buffer() {return buf_.data();};
+    void    set_packet(Packet&& p) {p_ = std::forward<Packet>(p);};
+    Packet& get_packet() {return p_;};
 
     bool in_progress() const {return in_progress_;};
     void put_on_hold()       {in_progress_ = false;};
 
 private:
-    std::array<uint8_t, max_transfer_size> buf_ {0};
+    Packet p_;
     std::atomic_bool in_progress_ = false;
 };
 
@@ -62,9 +61,7 @@ public:
              uint8_t in_endpoint, uint8_t out_endpoint);
     virtual ~UsbAsync();
 
-    virtual void write(const std::string& buf);
-    virtual void write(std::string&& buf);
-    virtual bool read(std::string& buf);
+    virtual void write(Packet&& p);
     virtual void stop();
     virtual void start();
 
@@ -80,15 +77,12 @@ private:
     uint8_t  in_endoint_;
     uint8_t  out_endpoit_;
 
-    common::ReaderWriterQueue<std::string>         write_queue_;
-    common::BlockingReaderWriterQueue<std::string> read_queue_;
-
     RTransfer * rtransfer_curr_ = nullptr;
     RTransfer * rtransfer_prev_ = nullptr;
     WTransfer * wtransfer_      = nullptr;
 
-    void fill_transfer(WTransfer& transfer, std::string&& buf);
-    void fill_transfer(RTransfer& transfer);
+    void fill_transfer(WTransfer * transfer, Packet&& p);
+    void fill_transfer(RTransfer * transfer);
     static void write_cb(libusb_transfer * transfer);
     static void read_cb(libusb_transfer * transfer);
 

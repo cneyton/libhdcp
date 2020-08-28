@@ -37,7 +37,7 @@ public:
 
     Status                   get_status()     const {return status_;}
     common::TimeoutQueue::Id get_id()         const {return id_;}
-    Packet::Id               get_command_id() const {return command_.get_id();}
+    Packet::Id               get_command_id() const {return command_.id();}
     const Packet&            get_command()    const {return command_;}
     Packet*                  get_ack()        const {return ack_;}
     uint                     get_retry()      const {return retry_;}

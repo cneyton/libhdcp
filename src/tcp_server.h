@@ -8,9 +8,9 @@
 
 #include "transport.h"
 #include "hdcp/exception.h"
+#include "packet.h"
 
-namespace hdcp
-{
+namespace hdcp {
 
 class TcpServer: public common::Log, private common::Thread, public Transport
 {
@@ -18,9 +18,7 @@ public:
     TcpServer(common::Logger logger, uint16_t port);
     virtual ~TcpServer();
 
-    virtual void write(const std::string& buf);
-    virtual void write(std::string&& buf);
-    virtual bool read(std::string& buf);
+    virtual void write(Packet&&);
     virtual void stop();
     virtual void start();
     bool is_open() {return socket_.is_open();};
@@ -32,21 +30,17 @@ private:
     TcpServer(const TcpServer&) = delete;
     const TcpServer& operator=(const TcpServer&) = delete;
 
-    std::recursive_mutex mutex_;
-
     boost::asio::io_context        io_context_;
     boost::asio::ip::tcp::socket   socket_;
     boost::asio::ip::tcp::acceptor acceptor_;
 
-    std::array<char, max_transfer_size> read_buf_ = {0};
-    std::string                         write_buf_;
+    Packet read_packet_;
+    Packet write_packet_;
     std::atomic_bool write_in_progress_ = false;
 
-    common::ConcurrentQueue<std::string>           write_queue_;
-    common::BlockingReaderWriterQueue<std::string> read_queue_;
-
-    void do_read();
     void do_write();
+    void read_header();
+    void read_payload();
 
     void open();
     void close();

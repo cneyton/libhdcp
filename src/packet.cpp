@@ -2,37 +2,27 @@
 #include "hdcp/exception.h"
 #include "hdcp/hdcp.h"
 
-namespace hdcp
-{
+namespace hdcp {
 
-Packet::Packet(const std::string& buf): data_(buf)
+Packet::Packet(std::string_view v)
 {
-    validate_packet();
-}
+    // find start of packet
+    auto pos = v.find(reinterpret_cast<const char*>(&sop), 0, sizeof(sop));
+    if (pos == std::string::npos)
+        throw hdcp::packet_error("sop not found");
 
-Packet::Packet(std::string&& buf): data_(std::forward<std::string>(buf))
-{
-    validate_packet();
-}
+    if (pos + sizeof(Header) > v.size())
+        throw hdcp::packet_error("buffer too small for header");
 
-Packet::Packet(const Packet& other): data_(other.data_)
-{
-}
+    const Header * header = parse_header(std::string_view(v.data() + pos, sizeof(Header)));
+    if (pos + sizeof(Header) + header->len > v.size())
+        throw hdcp::packet_error("buffer too small for payload");
 
-Packet::Packet(Packet&& other): data_(std::move(other.data_))
-{
-}
+    std::string_view payload(v.data() + pos + sizeof(Header), header->len);
+    parse_payload(payload, header);
 
-Packet& Packet::operator=(const Packet& p)
-{
-    if (this == &p)
-        return *this;
-    data_ = p.get_data();
-    return *this;
-}
-
-Packet::~Packet()
-{
+    // buffer is valid, copy data
+    std::copy(v.begin(), v.begin() + sizeof(Header) + header->len, data_.begin());
 }
 
 Packet Packet::make_command(Id id, BlockType type, const std::string& data)
@@ -96,27 +86,16 @@ Packet Packet::make_dip(Id id, const hdcp::Identification& dev_id)
     return Packet(header + payload);
 }
 
-Packet::Crc Packet::compute_crc(std::string_view data)
+Packet::Crc Packet::compute_crc(std::string_view v)
 {
     uint8_t CRCA = 0, CRCB = 0;
 
-    for (const auto& c: data) {
+    for (const auto& c: v) {
         CRCA = CRCA + *reinterpret_cast<const uint8_t*>(&c);
         CRCB = CRCB + CRCA;
     }
 
     return CRCA << 8 | CRCB;
-}
-
-Packet::Crc Packet::compute_hcrc() const
-{
-    std::string_view h(data_.data(), sizeof(Packet::Header) - sizeof(Crc));
-    return compute_crc(h);
-}
-
-Packet::Crc Packet::compute_pcrc() const
-{
-    return compute_crc(get_payload());
 }
 
 std::string Packet::make_header(Id id, Type type, uint8_t n_block, const std::string& payload)
@@ -128,13 +107,13 @@ std::string Packet::make_header(Id id, Type type, uint8_t n_block, const std::st
         .id   = id,
         .type = type,
         .n_block = n_block,
-        .p_crc = Packet::compute_crc(std::string_view(payload.data(), payload.size())),
+        .p_crc = compute_crc(std::string_view(payload.data(), payload.size())),
         .h_crc = 0
     };
 
     char * it = reinterpret_cast<char*>(&h);
     std::string_view header_view(it, sizeof(Packet::Header) - sizeof(Crc));
-    h.h_crc = Packet::compute_crc(header_view);
+    h.h_crc = compute_crc(header_view);
 
     return std::string(it, it + sizeof(h));
 }
@@ -163,18 +142,74 @@ std::string Packet::make_block(Block& b)
     return ret;
 }
 
-void Packet::validate_packet() const
+std::vector<Packet::Block> Packet::blocks(std::string_view payload)
 {
-    if (data_.size() < sizeof(Packet::Header) || data_.size() > max_transfer_size)
-        throw hdcp::packet_error(fmt::format("invalid buffer size: {}", data_.size()));
+    std::vector<Block> blocks;
+    auto it = payload.begin();
+    while (it + sizeof(BHeader) <= payload.end()) {
+        const BHeader * header = reinterpret_cast<const BHeader*>(it);
+        it += sizeof(Packet::BHeader);
+        if (it + header->len > payload.end())
+            break;
+        Block b = {
+            .type = header->type,
+            .data = std::string_view(it, header->len),
+        };
+        it += header->len;
+        blocks.push_back(b);
+    }
 
-    const Header * h = get_header();
-    if (compute_hcrc() != h->h_crc)
+    return blocks;
+}
+
+//Packet::Status Packet::validate_header(std::string_view v) {
+    //if (v.size() != sizeof(Packet::Header))
+        //return Status {Status::ErrorCode::header_size};
+
+    //const Header * h = reinterpret_cast<const Header*>(v.data());
+    //if (compute_crc(std::string_view(v.data(), v.size()-sizeof(Crc))) != h->h_crc)
+        //return Status {Status::ErrorCode::header_crc};
+
+    //if (h->sop != sop)
+        //return Status {Status::ErrorCode::sop};
+
+    //if (h->ver != ver)
+        //return Status {Status::ErrorCode::protocol_version};
+
+    //switch (h->type) {
+    //case Packet::Type::hip:
+    //case Packet::Type::dip:
+    //case Packet::Type::ka:
+    //case Packet::Type::ka_ack:
+    //case Packet::Type::cmd:
+    //case Packet::Type::cmd_ack:
+    //case Packet::Type::data:
+        //break;
+    //default:
+        //return Status {Status::ErrorCode::packet_type};
+    //}
+
+    //if (h->len > max_transfer_size - sizeof(Header))
+        //return Status {Status::ErrorCode::payload_length};
+
+    //return Status {Status::ErrorCode::none};
+//}
+
+const Packet::Header * Packet::parse_header(std::string_view v)
+{
+    if (v.size() != sizeof(Packet::Header))
+        throw hdcp::packet_error(fmt::format("buffer size != header size: {}", v.size()));
+
+    const Header * h = reinterpret_cast<const Header*>(v.data());
+    if (compute_crc(std::string_view(v.data(), v.size()-sizeof(Crc))) != h->h_crc)
         throw hdcp::packet_error("wrong header crc");
+
     if (h->sop != sop)
-        throw hdcp::packet_error("wrong start of packet");
+        throw hdcp::packet_error("sop not at beginning of buffer");
+
     if (h->ver != ver)
         throw hdcp::packet_error("wrong protocol version");
+
     switch (h->type) {
     case Packet::Type::hip:
     case Packet::Type::dip:
@@ -188,46 +223,43 @@ void Packet::validate_packet() const
         throw hdcp::packet_error("wrong packet type");
     }
 
-    uint16_t len = data_.size() - sizeof(Packet::Header);
-    if (h->len != len)
-        throw hdcp::packet_error(fmt::format("wrong payload length: received {}, should be {}", len, h->len));
+    if (h->len > max_size - sizeof(Header))
+        throw hdcp::packet_error(fmt::format("payload length too big {}", h->len));
 
-    if (h->p_crc != compute_pcrc())
-        throw hdcp::packet_error("wrong payload crc");
-
-    if (h->n_block != get_blocks().size())
-        throw hdcp::packet_error(fmt::format("wrong number of blocks: received {}, should be {}",
-                                             get_blocks().size(), h->n_block));
+    return h;
 }
 
-std::vector<Packet::Block> Packet::get_blocks() const
+void Packet::parse_header() const
 {
-    std::string_view payload(get_payload());
+    parse_header(std::string_view(data_.data(), sizeof(Packet::Header)));
+}
 
-    std::vector<Block> blocks;
-    auto it = payload.begin();
-    while (it + sizeof(BHeader) <= payload.end()) {
-        const BHeader * header = reinterpret_cast<const BHeader*>(it);
-        it += sizeof(Packet::BHeader);
-        if (it + header->len > payload.end())
-            throw hdcp::packet_error("wrong block length");
-        Block b = {
-            .type = header->type,
-            .data = std::string_view(it, header->len),
-        };
-        it += header->len;
-        blocks.push_back(b);
-    }
+void Packet::parse_payload(std::string_view v, const Header * h)
+{
+    if (h->len != v.size())
+        throw hdcp::packet_error(fmt::format("wrong payload length: {} should be {}",
+                                             h->len, v.size()));
 
-    return blocks;
+    if (h->p_crc != compute_crc(v))
+        throw hdcp::packet_error("wrong payload crc");
+
+    auto b = blocks(v);
+    if (h->n_block != b.size())
+        throw hdcp::packet_error(fmt::format("wrong number of blocks: {} should be {}",
+                                 b.size(), h->n_block));
+}
+
+void Packet::parse_payload() const
+{
+    parse_payload(payload(), header());
 }
 
 std::ostream& operator<<(std::ostream& out, const Packet& p)
 {
     out << fmt::format("\npacket {}: type={:#x}, with {} block(s) (prot ver:{})\n",
-                       p.get_id(), p.get_type(), p.get_nb_block(), p.get_ver());
+                       p.id(), p.type(), p.nb_block(), p.version());
     int i = 0;
-    for (auto& b: p.get_blocks()) {
+    for (auto& b: p.blocks()) {
         out << fmt::format("\tblock {}: type {:#x}, len {} -> {:#x}\n",
                            i++, b.type, b.data.length(),
                            fmt::join((uint8_t*)b.data.data(),
