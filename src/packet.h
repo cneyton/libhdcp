@@ -103,14 +103,13 @@ private:
     static std::string make_block(BlockType type, const std::string& data);
     static std::string make_block(Block& b);
     static std::vector<Block> blocks(std::string_view);
+    static const Header * parse_header(std::string_view);
+    static void parse_payload(std::string_view, const Header *);
 
     const Header * header() const
     {
         return reinterpret_cast<const Header*>(data_.data());
     }
-
-    static const Header * parse_header(std::string_view);
-    static void parse_payload(std::string_view, const Header *);
 
     std::array<char, max_size> data_;
 };

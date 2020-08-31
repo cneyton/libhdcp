@@ -1,6 +1,5 @@
 #include "packet.h"
 #include "hdcp/exception.h"
-#include "hdcp/hdcp.h"
 
 namespace hdcp {
 
@@ -162,39 +161,6 @@ std::vector<Packet::Block> Packet::blocks(std::string_view payload)
     return blocks;
 }
 
-//Packet::Status Packet::validate_header(std::string_view v) {
-    //if (v.size() != sizeof(Packet::Header))
-        //return Status {Status::ErrorCode::header_size};
-
-    //const Header * h = reinterpret_cast<const Header*>(v.data());
-    //if (compute_crc(std::string_view(v.data(), v.size()-sizeof(Crc))) != h->h_crc)
-        //return Status {Status::ErrorCode::header_crc};
-
-    //if (h->sop != sop)
-        //return Status {Status::ErrorCode::sop};
-
-    //if (h->ver != ver)
-        //return Status {Status::ErrorCode::protocol_version};
-
-    //switch (h->type) {
-    //case Packet::Type::hip:
-    //case Packet::Type::dip:
-    //case Packet::Type::ka:
-    //case Packet::Type::ka_ack:
-    //case Packet::Type::cmd:
-    //case Packet::Type::cmd_ack:
-    //case Packet::Type::data:
-        //break;
-    //default:
-        //return Status {Status::ErrorCode::packet_type};
-    //}
-
-    //if (h->len > max_transfer_size - sizeof(Header))
-        //return Status {Status::ErrorCode::payload_length};
-
-    //return Status {Status::ErrorCode::none};
-//}
-
 const Packet::Header * Packet::parse_header(std::string_view v)
 {
     if (v.size() != sizeof(Packet::Header))
@@ -208,7 +174,7 @@ const Packet::Header * Packet::parse_header(std::string_view v)
         throw hdcp::packet_error("sop not at beginning of buffer");
 
     if (h->ver != ver)
-        throw hdcp::packet_error("wrong protocol version");
+        throw hdcp::packet_error(fmt::format("wrong protocol version: {}", h->ver));
 
     switch (h->type) {
     case Packet::Type::hip:
@@ -220,7 +186,7 @@ const Packet::Header * Packet::parse_header(std::string_view v)
     case Packet::Type::data:
         break;
     default:
-        throw hdcp::packet_error("wrong packet type");
+        throw hdcp::packet_error(fmt::format("unknown packet type: {:#x}", h->type));
     }
 
     if (h->len > max_size - sizeof(Header))
