@@ -18,7 +18,7 @@ int main(int argc, char* argv[])
     common::Logger logger(spdlog::stdout_color_mt("hdcp"));
     logger->set_level(spdlog::level::debug);
 
-    Identification id ("server", "0001", "0.0.01", "0.1.02");
+    Identification id {"server", "0001", "0.0.01", "0.1.02"};
     uint16_t port = std::stoi(argv[1]);
     TcpServer server(logger, port);
     Slave slave(logger, &server, cmd_cb, id);

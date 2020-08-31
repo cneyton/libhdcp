@@ -24,7 +24,7 @@ int main(int argc, char* argv[])
     common::Logger logger(spdlog::stdout_color_mt("hdcp"));
     logger->set_level(spdlog::level::trace);
 
-    Identification id ("client", "0001", "0.0.01", "0.1.02");
+    Identification id {"client", "0001", "0.0.01", "0.1.02"};
     UsbAsync  usb(logger, itfc_nb, vendor_id, product_id, in_endpoint, out_endpoint);
     Master master(logger, &usb, data_cb, id);
 

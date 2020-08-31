@@ -19,7 +19,7 @@ int main(int argc, char* argv[])
     common::Logger logger(spdlog::stdout_color_mt("hdcp"));
     logger->set_level(spdlog::level::debug);
 
-    Identification id ("client", "0001", "0.0.01", "0.1.02");
+    Identification id {"client", "0001", "0.0.01", "0.1.02"};
     TcpClient client(logger, argv[1], argv[2]);
     Master master(logger, &client, data_cb, id);
 
