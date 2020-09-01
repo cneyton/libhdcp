@@ -3,11 +3,11 @@
 
 using namespace hdcp;
 
-Master::Master(common::Logger logger, Transport* transport, DataCallback data_cb,
-                         const Identification& host_id):
+Master::Master(common::Logger logger, const Identification& host_id,
+               std::unique_ptr<Transport> transport, DataCallback data_cb):
     common::Log(logger),
-    statemachine_(logger, "com_master", states_, State::disconnected),
-    transport_(transport), request_manager_(logger, transport),
+    statemachine_(logger, "com_master", states_, State::init),
+    transport_(std::move(transport)), request_manager_(logger, transport_.get()),
     host_id_(host_id), data_cb_(data_cb)
 {
     statemachine_.display_trace();
@@ -34,9 +34,8 @@ void Master::stop()
     cv_connection_.notify_all();
     if (joinable())
         join();
-    statemachine_.reinit();
-    // one more wakeup to execute one loop of the disconnected state
-    statemachine_.wakeup();
+    transport_->stop();
+    request_manager_.stop();
 }
 
 void Master::send_command(Packet::BlockType id, const std::string& data, Request::Callback cb)
@@ -49,6 +48,7 @@ void Master::send_command(Packet::BlockType id, const std::string& data, Request
 
 void Master::connect()
 {
+    /* TODO: check if already connected  <01-09-20, cneyton> */
     std::unique_lock<std::mutex> lk(mutex_connection_);
     disconnection_requested_ = false;
     connection_requested_ = true;
@@ -67,38 +67,39 @@ void Master::disconnect()
     disconnection_requested_ = true;
 }
 
-int Master::handler_state_disconnected_()
+int Master::handler_state_init()
+{
+    notify_running(0);
+    return 0;
+}
+
+int Master::handler_state_disconnected()
 {
     if (statemachine_.get_nb_loop_in_current_state() == 1) {
         disconnection_requested_ = false;
+        transport_->stop();
         request_manager_.stop_master_keepalive_management();
         request_manager_.stop();
-        if (request_manager_.joinable())
-            request_manager_.join();
         // notify connection attempt failed
         std::unique_lock<std::mutex> lk(mutex_connecting_);
         cv_connecting_.notify_all();
-        // notify thread running for first start
-        /* TODO: maybe use an init state  <24-07-20, cneyton> */
-        notify_running(0);
         // need to return here to not wait when stopping
-        return 0;
+        return 0; /*! TODO: remove  */
     }
 
     wait_connection_request();
     return 0;
 }
 
-int Master::handler_state_connecting_()
+int Master::handler_state_connecting()
 {
     if (statemachine_.get_nb_loop_in_current_state() == 1) {
         connection_requested_ = false;
-        request_manager_.start(1);
+        transport_->clear_queues();
+        transport_->start();
+        request_manager_.start();
         request_manager_.send_hip(host_id_, connecting_timeout_);
     }
-
-    if (!transport_)
-        throw hdcp::application_error("transport null pointer");
 
     Packet p;
     if (!transport_->read(p))
@@ -119,7 +120,7 @@ int Master::handler_state_connecting_()
     return 0;
 }
 
-int Master::handler_state_connected_()
+int Master::handler_state_connected()
 {
     if (statemachine_.get_nb_loop_in_current_state() == 1) {
         dip_received_ = false;
@@ -128,9 +129,6 @@ int Master::handler_state_connected_()
         std::unique_lock<std::mutex> lk(mutex_connecting_);
         cv_connecting_.notify_all();
     }
-
-    if (!transport_)
-        throw hdcp::application_error("transport null pointer");
 
     Packet p;
     if (!transport_->read(p))
@@ -156,22 +154,27 @@ int Master::handler_state_connected_()
     return 0;
 }
 
-int Master::check_connection_requested_()
+int Master::check_true()
+{
+    return common::statemachine::goto_next_state;
+}
+
+int Master::check_connection_requested()
 {
     return connection_requested_ ? common::statemachine::goto_next_state:
                                    common::statemachine::stay_curr_state;
 }
 
-int Master::check_connected_()
+int Master::check_connected()
 {
     return dip_received_ ? common::statemachine::goto_next_state:
                            common::statemachine::stay_curr_state;
 }
 
-int Master::check_disconnected_()
+int Master::check_disconnected()
 {
     if (disconnection_requested_ || request_manager_.dip_timeout() ||
-        request_manager_.keepalive_timeout())
+        request_manager_.keepalive_timeout() || !transport_->is_open())
         return common::statemachine::goto_next_state;
     else
         return common::statemachine::stay_curr_state;

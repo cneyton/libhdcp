@@ -3,6 +3,23 @@
 
 using namespace hdcp;
 
+void RequestManager::start()
+{
+    if (is_running())
+        return;
+    common::Thread::start(true);
+}
+
+void RequestManager::stop()
+{
+    if (!is_running())
+        return;
+    common::Thread::stop();
+    if (joinable())
+        join();
+}
+
+
 void RequestManager::send_command(Packet::BlockType type, const std::string& data,
                                   Request::Callback request_cb, std::chrono::milliseconds timeout)
 {

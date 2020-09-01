@@ -16,8 +16,7 @@
 #include "transport.h"
 #include "packet.h"
 
-namespace hdcp
-{
+namespace hdcp {
 
 class Request
 {
@@ -83,7 +82,12 @@ public:
     bool keepalive_timeout() const {return ka_timeout_flag_;}
     bool dip_timeout()       const {return dip_timeout_flag_;}
 
+    void start();
+    void stop() override;
+
 private:
+    using common::Thread::start;
+
     static const uint max_retry_    = 4;
 
     struct by_request {};

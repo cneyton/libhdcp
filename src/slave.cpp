@@ -3,11 +3,11 @@
 
 using namespace hdcp;
 
-Slave::Slave(common::Logger logger, Transport* transport, CmdCallback cmd_cb,
-                         const Identification& id):
+Slave::Slave(common::Logger logger, const Identification& id,
+             std::unique_ptr<Transport> transport, CmdCallback cmd_cb):
     common::Log(logger),
-    statemachine_(logger, "com_slave", states_, State::disconnected),
-    transport_(transport), request_manager_(logger, transport),
+    statemachine_(logger, "com_slave", states_, State::init),
+    transport_(std::move(transport)), request_manager_(logger, transport.get()),
     id_(id), cmd_cb_(cmd_cb)
 {
     statemachine_.display_trace();
@@ -32,9 +32,8 @@ void Slave::stop()
     common::Thread::stop();
     if (joinable())
         join();
-    statemachine_.reinit();
-    // one more wakeup to execute one loop of the disconnected state
-    statemachine_.wakeup();
+    transport_->stop();
+    request_manager_.stop();
 }
 
 void Slave::send_data(std::vector<Packet::Block>& blocks)
@@ -61,19 +60,16 @@ void Slave::disconnect()
     disconnection_requested_ = true;
 }
 
-int Slave::handler_state_disconnected_()
+int Slave::handler_state_disconnected()
 {
     if (statemachine_.get_nb_loop_in_current_state() == 1) {
         disconnection_requested_ = false;
         request_manager_.stop_slave_keepalive_management();
         request_manager_.stop();
-        if (request_manager_.joinable())
-            request_manager_.join();
+        transport_->clear_queues();
+        transport_->start();
         return 0;
     }
-
-    if (!transport_)
-        throw hdcp::application_error("transport null pointer");
 
     Packet p;
     if (!transport_->read(p))
@@ -84,7 +80,7 @@ int Slave::handler_state_disconnected_()
     case Packet::Type::hip:
         connection_requested_ = true;
         set_master_id(p);
-        request_manager_.start(1);
+        request_manager_.start();
         request_manager_.send_dip(id_);
         request_manager_.start_slave_keepalive_management(keepalive_timeout);
         break;
@@ -96,14 +92,11 @@ int Slave::handler_state_disconnected_()
     return 0;
 }
 
-int Slave::handler_state_connecting_()
+int Slave::handler_state_connecting()
 {
     if (statemachine_.get_nb_loop_in_current_state() == 1) {
         connection_requested_ = false;
     }
-
-    if (!transport_)
-        throw hdcp::application_error("transport null pointer");
 
     Packet p;
     if (!transport_->read(p))
@@ -123,7 +116,7 @@ int Slave::handler_state_connecting_()
     return 0;
 }
 
-int Slave::handler_state_connected_()
+int Slave::handler_state_connected()
 {
     if (statemachine_.get_nb_loop_in_current_state() == 1) {
         ka_received_ = false;
@@ -160,21 +153,27 @@ int Slave::handler_state_connected_()
     return 0;
 }
 
-int Slave::check_connection_requested_()
+int Slave::check_true()
+{
+    return common::statemachine::goto_next_state;
+}
+
+int Slave::check_connection_requested()
 {
     return connection_requested_ ? common::statemachine::goto_next_state:
                                    common::statemachine::stay_curr_state;
 }
 
-int Slave::check_connected_()
+int Slave::check_connected()
 {
     return ka_received_ ? common::statemachine::goto_next_state:
                            common::statemachine::stay_curr_state;
 }
 
-int Slave::check_disconnected_()
+int Slave::check_disconnected()
 {
-    if (disconnection_requested_ || request_manager_.keepalive_timeout())
+    if (disconnection_requested_ || request_manager_.keepalive_timeout()
+        || !transport_->is_open())
         return common::statemachine::goto_next_state;
     else
         return common::statemachine::stay_curr_state;
