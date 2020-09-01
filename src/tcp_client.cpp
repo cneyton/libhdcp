@@ -79,6 +79,7 @@ void TcpClient::run()
     while (is_running()) {
         try {
             io_context_.run();
+            break; // run exited normally
         } catch (std::exception& e) {
             log_error(logger_, e.what());
         }
