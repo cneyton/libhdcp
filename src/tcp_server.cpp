@@ -54,10 +54,15 @@ void TcpServer::close()
         });
 }
 
+bool TcpServer::is_open()
+{
+    return socket_.is_open();
+}
+
 void TcpServer::write(Packet&& p)
 {
-    if (!is_running())
-        throw hdcp::transport_error("not allowed to write when transport is stopped");
+    if (!is_open())
+        throw hdcp::transport_error("can't write while transport is closed");
 
     boost::asio::post(io_context_,
         [this, p] ()

@@ -18,25 +18,21 @@ constexpr uint64_t timeout_write = time_base_ms.count();
 class Transport
 {
 public:
-    Transport(): write_queue_(max_queue_size), read_queue_(max_queue_size)
-    {
-    }
-    virtual ~Transport()                       = default;
-    Transport(const Transport&)                = delete;
-    Transport& operator=(const Transport&)     = delete;
-    Transport(Transport&&)                     = delete;
-    Transport& operator=(Transport&&)          = delete;
-    virtual void write(Packet&&) = 0;
+    Transport(): write_queue_(max_queue_size), read_queue_(max_queue_size) {};
+    virtual ~Transport() = default;
+
     virtual void write(const Packet& p) {write(Packet(p));};
     bool read(Packet& p)
     {
-        //if (!is_running())
-            //throw hdcp::transport_error("not allowed to read when transport is stopped");
         return read_queue_.wait_dequeue_timed(p, time_base_ms);
     }
-    virtual void start()                       = 0;
-    virtual void stop()                        = 0;
-    bool is_open() {return open_;};
+
+    virtual void write(Packet&&) = 0;
+    virtual void start()   = 0;
+    virtual void stop()    = 0;
+    virtual bool is_open() = 0;
+    virtual void open()    = 0;
+    virtual void close()   = 0;
 
     void clear_queues()
     {
@@ -46,10 +42,15 @@ public:
     }
 
 protected:
-    bool open_ = false;
-
     common::ConcurrentQueue<Packet>           write_queue_;
     common::BlockingReaderWriterQueue<Packet> read_queue_;
+
+private:
+    // disable copy ctor, copy assignment, move ctor & move assignment
+    Transport(const Transport&)            = delete;
+    Transport& operator=(const Transport&) = delete;
+    Transport(Transport&&)                 = delete;
+    Transport& operator=(Transport&&)      = delete;
 };
 
 } /* namespace hdcp */

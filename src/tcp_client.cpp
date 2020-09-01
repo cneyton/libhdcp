@@ -15,8 +15,8 @@ TcpClient::~TcpClient()
 
 void TcpClient::write(Packet&& p)
 {
-    if (!is_running())
-        throw hdcp::transport_error("not allowed to write when transport is stopped");
+    if (!is_open())
+        throw hdcp::transport_error("can't write while transport is closed");
 
     boost::asio::post(io_context_,
         [this, p] ()
@@ -67,6 +67,11 @@ void TcpClient::close()
             // close socket
             socket_.close();
         });
+}
+
+bool TcpClient::is_open()
+{
+    return socket_.is_open();
 }
 
 void TcpClient::run()

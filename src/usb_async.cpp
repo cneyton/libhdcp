@@ -61,8 +61,16 @@ UsbAsync::~UsbAsync()
     libusb_exit(ctx_);
 }
 
+bool UsbAsync::is_open()
+{
+    return open_;
+}
+
 void UsbAsync::open()
 {
+    if (is_open())
+        return;
+
     if (!(device_handle_ = libusb_open_device_with_vid_pid(ctx_, vendor_id_, product_id_)))
         throw hdcp::transport_error("device not found");
 
@@ -77,10 +85,15 @@ void UsbAsync::open()
     rtransfer_prev_ = new RTransfer(device_handle_);
     fill_transfer(rtransfer_curr_);
     fill_transfer(rtransfer_prev_);
+
+    open_ = true;
 }
 
 void UsbAsync::close()
 {
+    if (!is_open())
+        return;
+
     clear_queues();
     // delete transfers
     delete wtransfer_;
@@ -92,22 +105,27 @@ void UsbAsync::close()
     // close
     libusb_close(device_handle_);
     device_handle_ = nullptr;
+
+    open_ = false;
 }
 
 void UsbAsync::write(Packet&& p)
 {
+    if (!is_open())
+        throw hdcp::transport_error("can't write while transport is closed");
+
     if (wtransfer_->in_progress()) {
         if (!write_queue_.try_enqueue(std::forward<Packet>(p)))
             throw hdcp::transport_error("write queue full");
     } else {
-        fill_transfer(wtransfer_, std::forward<Packet>(p));
+        wtransfer_->set_packet(std::forward<Packet>(p));
+        fill_transfer(wtransfer_);
         wtransfer_->submit();
     }
 }
 
-void UsbAsync::fill_transfer(WTransfer * transfer, Packet&& p)
+void UsbAsync::fill_transfer(WTransfer * transfer)
 {
-    transfer->set_packet(std::forward<Packet>(p));
     libusb_fill_bulk_transfer(transfer->get_libusb_transfer(), device_handle_, out_endpoit_,
                               (uint8_t*)transfer->get_packet().data(),
                               transfer->get_packet().size(),
@@ -131,9 +149,8 @@ void UsbAsync::write_cb(libusb_transfer * transfer)
               fmt::join((uint8_t*)transfer->buffer,
                         (uint8_t*)transfer->buffer + transfer->actual_length, "|"));
 
-    Packet p;
-    if (usb->write_queue_.try_dequeue(p)) {
-        usb->fill_transfer(usb->wtransfer_, std::move(p));
+    if (usb->write_queue_.try_dequeue(usb->wtransfer_->get_packet())) {
+        usb->fill_transfer(usb->wtransfer_);
         usb->wtransfer_->submit();
     } else {
         usb->wtransfer_->put_on_hold();

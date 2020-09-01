@@ -3,12 +3,9 @@
 #include <boost/asio.hpp>
 
 #include "common/thread.h"
-#include "common/concurrentqueue.h"
-#include "common/readerwriterqueue.h"
 
 #include "transport.h"
 #include "hdcp/exception.h"
-#include "packet.h"
 
 namespace hdcp {
 
@@ -18,17 +15,15 @@ public:
     TcpServer(common::Logger logger, uint16_t port);
     virtual ~TcpServer();
 
-    virtual void write(Packet&&);
-    virtual void stop();
-    virtual void start();
-    bool is_open() {return socket_.is_open();};
+    void write(Packet&& p) override;
+    void stop()    override;
+    void start()   override;
+    bool is_open() override;
+    void open()    override;
+    void close()   override;
 
 private:
     using common::Thread::start;
-
-    // Non-copyable
-    TcpServer(const TcpServer&) = delete;
-    const TcpServer& operator=(const TcpServer&) = delete;
 
     boost::asio::io_context        io_context_;
     boost::asio::ip::tcp::socket   socket_;
@@ -42,10 +37,7 @@ private:
     void read_header();
     void read_payload();
 
-    void open();
-    void close();
-
-    virtual void run();
+    void run() override;
 };
 
 } /* namespace hdcp */

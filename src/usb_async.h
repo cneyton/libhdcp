@@ -3,7 +3,6 @@
 #include <libusb-1.0/libusb.h>
 
 #include "common/log.h"
-#include "common/readerwriterqueue.h"
 #include "common/thread.h"
 
 #include "transport.h"
@@ -39,7 +38,7 @@ private:
 class WTransfer: public Transfer
 {
 public:
-    virtual void submit();
+    void submit() override;
 
     void    set_packet(Packet&& p) {p_ = std::forward<Packet>(p);};
     Packet& get_packet() {return p_;};
@@ -61,9 +60,12 @@ public:
              uint8_t in_endpoint, uint8_t out_endpoint);
     virtual ~UsbAsync();
 
-    virtual void write(Packet&& p);
-    virtual void stop();
-    virtual void start();
+    void write(Packet&& p) override;
+    void stop()    override;
+    void start()   override;
+    bool is_open() override;
+    void open()    override;
+    void close()   override;
 
 private:
     using common::Thread::start;
@@ -71,25 +73,22 @@ private:
     libusb_context       * ctx_ = nullptr;
     libusb_device_handle * device_handle_ = nullptr;
 
-    int      itfc_nb_;
-    uint16_t vendor_id_;
-    uint16_t product_id_;
-    uint8_t  in_endoint_;
-    uint8_t  out_endpoit_;
-
     RTransfer * rtransfer_curr_ = nullptr;
     RTransfer * rtransfer_prev_ = nullptr;
     WTransfer * wtransfer_      = nullptr;
 
-    void fill_transfer(WTransfer * transfer, Packet&& p);
+    bool open_ = false;
+
+    int      itfc_nb_;
+    uint16_t vendor_id_, product_id_;
+    uint8_t  in_endoint_, out_endpoit_;
+
+    void fill_transfer(WTransfer * transfer);
     void fill_transfer(RTransfer * transfer);
     static void write_cb(libusb_transfer * transfer);
     static void read_cb(libusb_transfer * transfer);
 
-    void open();
-    void close();
-
-    virtual void run();
+    void run() override;
 };
 
 } /* namespace hdcp */

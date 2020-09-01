@@ -1,26 +1,24 @@
 #include "boost/asio.hpp"
 
 #include "common/thread.h"
-#include "common/readerwriterqueue.h"
 
 #include "transport.h"
 #include "hdcp/exception.h"
-#include "packet.h"
 
-namespace hdcp
-{
+namespace hdcp {
 
 class TcpClient: public common::Log, private common::Thread, public Transport
 {
 public:
     TcpClient(common::Logger logger, std::string_view host, std::string_view service);
-
     virtual ~TcpClient();
 
-    virtual void write(Packet&&);
-    virtual void stop();
-    virtual void start();
-    bool is_open() {return socket_.is_open();};
+    void write(Packet&& p) override;
+    void stop()    override;
+    void start()   override;
+    bool is_open() override;
+    void open()    override;
+    void close()   override;
 
 private:
     using common::Thread::start;
@@ -34,14 +32,11 @@ private:
     Packet write_packet_;
     std::atomic_bool write_in_progress_ = false;
 
-    void open();
-    void close();
-
     void do_write();
     void read_header();
     void read_payload();
 
-    virtual void run();
+    void run() override;
 };
 
 } /* namespace hdcp */
