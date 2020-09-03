@@ -1,5 +1,8 @@
 #pragma once
 
+#include <mutex>
+#include <condition_variable>
+
 #include <libusb-1.0/libusb.h>
 
 #include "common/log.h"
@@ -16,10 +19,17 @@ public:
     virtual ~Transfer();
 
     virtual void submit();
-    libusb_transfer * get_libusb_transfer() const {return transfer_;};
+    int  async_cancel();
+    void cancel();
+    void wait_cancel();
+    void notify_cancelled();
+    libusb_transfer * libusb_transfer_ptr() const {return transfer_;};
 
 private:
-    libusb_transfer * transfer_ = nullptr;
+    libusb_transfer *       transfer_ = nullptr;
+    std::mutex              mutex_cancel_;
+    std::condition_variable cv_cancel_;
+    bool                    cancelled_ = false;
 };
 
 class RTransfer: public Transfer
@@ -40,8 +50,7 @@ class WTransfer: public Transfer
 public:
     void submit() override;
 
-    void    set_packet(Packet&& p) {p_ = std::forward<Packet>(p);};
-    Packet& get_packet() {return p_;};
+    Packet& packet() {return p_;};
 
     bool in_progress() const {return in_progress_;};
     void put_on_hold()       {in_progress_ = false;};
@@ -85,10 +94,22 @@ private:
 
     void fill_transfer(WTransfer * transfer);
     void fill_transfer(RTransfer * transfer);
-    static void write_cb(libusb_transfer * transfer);
-    static void read_cb(libusb_transfer * transfer);
+    /*
+     * NB:
+     * - never propagate exception through external module
+     * - don't call close in cb -> deadlocks
+     */
+    static void write_cb(libusb_transfer * transfer) noexcept;
+    static void read_cb(libusb_transfer * transfer)  noexcept;
 
     void run() override;
+
+    /*
+     * we use a different logger for libusb since we need to get his name in
+     * the log cb
+     */
+    static void log_cb(libusb_context*, libusb_log_level, const char*) noexcept;
+    common::Logger usb_logger_;
 };
 
 } /* namespace hdcp */
