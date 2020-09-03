@@ -135,10 +135,6 @@ void UsbAsync::close()
         return;
 
     log_debug(logger_, "closing transport...");
-    // cancel transfers
-    wtransfer_->cancel();
-    rtransfer_curr_->cancel();
-    rtransfer_prev_->cancel();
     // delete transfers
     delete wtransfer_;
     delete rtransfer_curr_;
@@ -277,7 +273,10 @@ void UsbAsync::run()
 
 void UsbAsync::stop()
 {
+    if (!is_running())
+        return;
     log_debug(logger_, "stopping transport...");
+    cancel_transfers();
     common::Thread::stop();
     close();
     if (joinable())
@@ -293,6 +292,15 @@ void UsbAsync::start()
     open();
     common::Thread::start(true);
     log_debug(logger_, "transport started");
+}
+
+void UsbAsync::cancel_transfers()
+{
+    log_debug(logger_, "cancelling transfers...");
+    if (wtransfer_)      wtransfer_->cancel();
+    if (rtransfer_curr_) rtransfer_curr_->cancel();
+    if (rtransfer_prev_) rtransfer_prev_->cancel();
+    log_debug(logger_, "transfers cancelled");
 }
 
 void UsbAsync::log_cb(libusb_context*, libusb_log_level lvl, const char* str) noexcept

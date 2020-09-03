@@ -94,6 +94,7 @@ private:
 
     void fill_transfer(WTransfer * transfer);
     void fill_transfer(RTransfer * transfer);
+    void cancel_transfers();
     /*
      * NB:
      * - never propagate exception through external module
