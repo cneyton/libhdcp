@@ -83,10 +83,9 @@ int Master::handler_state_disconnected()
         // notify connection attempt failed
         std::unique_lock<std::mutex> lk(mutex_connecting_);
         cv_connecting_.notify_all();
-        // need to return here to not wait when stopping
-        return 0; /*! TODO: remove  */
     }
 
+    log_trace(logger_, "wait connection");
     wait_connection_request();
     return 0;
 }
