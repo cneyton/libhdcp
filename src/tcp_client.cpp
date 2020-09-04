@@ -30,42 +30,55 @@ void TcpClient::write(Packet&& p)
 
 void TcpClient::stop()
 {
+    if (!is_running())
+        return;
+    log_debug(logger_, "stopping transport...");
     common::Thread::stop();
     close();
     if (joinable())
         join();
+    log_debug(logger_, "transport stopped");
 }
 
 void TcpClient::start()
 {
     if (is_running())
         return;
+    log_debug(logger_, "starting transport...");
     open();
     common::Thread::start(0);
+    log_debug(logger_, "transport started");
 };
 
 void TcpClient::open()
 {
+    if (is_open())
+        return;
+    log_debug(logger_, "opening transport...");
     boost::asio::ip::tcp::resolver resolver(io_context_);
     auto endpoints = resolver.resolve(host_, service_);
     boost::asio::async_connect(socket_, endpoints,
        [this](const boost::system::error_code& ec, const boost::asio::ip::tcp::endpoint&)
        {
-           if (!ec)
+           if (!ec) {
+               log_debug(logger_, "transport opened");
                read_header();
-           else
+           } else {
                throw asio_error(ec);
+           }
        });
 }
 
 void TcpClient::close()
 {
+    if (!is_open())
+        return;
+    log_debug(logger_, "closing transport...");
     boost::asio::post(io_context_,
         [this] ()
         {
-            clear_queues();
-            // close socket
             socket_.close();
+            log_debug(logger_, "transport closed");
         });
 }
 
@@ -79,6 +92,7 @@ void TcpClient::run()
     while (is_running()) {
         try {
             io_context_.run();
+            log_info(logger_, "break");
             break; // run exited normally
         } catch (std::exception& e) {
             log_error(logger_, e.what());

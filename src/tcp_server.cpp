@@ -17,40 +17,53 @@ TcpServer::~TcpServer()
 
 void TcpServer::stop()
 {
+    if (!is_running())
+        return;
+    log_debug(logger_, "stopping transport...");
     common::Thread::stop();
     close();
     if (joinable())
         join();
+    log_debug(logger_, "transport stopped");
 }
 
 void TcpServer::start()
 {
     if (is_running())
         return;
+    log_debug(logger_, "starting transport...");
     open();
     common::Thread::start(0);
+    log_debug(logger_, "transport started");
 }
 
 void TcpServer::open()
 {
+    if (is_open())
+        return;
+    log_debug(logger_, "opening transport, begin accepting connection...");
     acceptor_.async_accept(socket_,
         [this](const boost::system::error_code& ec)
         {
             if (!ec) {
-                log_debug(logger_, "connection accepted");
+                log_debug(logger_, "connection accepted, transport opened");
                 read_header();
+            } else {
+                throw asio_error(ec);
             }
         });
 }
 
 void TcpServer::close()
 {
+    if (!is_open())
+        return;
+    log_debug(logger_, "closing transport...");
     boost::asio::post(io_context_,
         [this] ()
         {
-            clear_queues();
-            // close socket
             socket_.close();
+            log_debug(logger_, "transport closed");
         });
 }
 
@@ -79,6 +92,7 @@ void TcpServer::run()
     while (is_running()) {
         try {
             io_context_.run();
+            log_info(logger_, "break");
             break; // run exited normally
         } catch (std::exception& e) {
             log_error(logger_, e.what());
