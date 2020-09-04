@@ -23,16 +23,14 @@ class Request
 public:
     using Callback = std::function<void(Request&)>;
 
-    Request(common::TimeoutQueue::Id id, Packet& cmd, Callback callback):
-        id_(id), command_(cmd), cb_(callback) {}
-
-    virtual ~Request() {}
-
     enum class Status {
         pending,
         timeout,
         fulfilled,
     };
+
+    Request(common::TimeoutQueue::Id id, Packet& cmd, Callback callback):
+        id_(id), command_(cmd), cb_(callback) {}
 
     Status                   get_status()     const {return status_;}
     common::TimeoutQueue::Id get_id()         const {return id_;}
