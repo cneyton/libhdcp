@@ -1,7 +1,7 @@
 #include "request.h"
 #include "hdcp/exception.h"
 
-using namespace hdcp;
+namespace hdcp {
 
 void RequestManager::start()
 {
@@ -166,6 +166,11 @@ void RequestManager::ack_dip()
     timeout_queue_.erase(dip_id_);
 }
 
+void inc_retry(Request& r)
+{
+    r.retry_++;
+}
+
 void RequestManager::cmd_timeout_cb(common::TimeoutQueue::Id id, int64_t)
 {
     std::unique_lock<std::mutex> lk(requests_mutex_);
@@ -177,7 +182,7 @@ void RequestManager::cmd_timeout_cb(common::TimeoutQueue::Id id, int64_t)
     if (search->get_retry() <= max_retry_) {
         log_warn(logger_, "command {} timeout, try = {}", search->get_command().id(),
                  search->get_retry());
-        set_by_request.modify(search, std::bind(&Request::inc_retry, *search));
+        set_by_request.modify(search, &inc_retry);
         if (!transport_)
             throw hdcp::application_error("transport null pointer");
         transport_->write(search->get_command());
@@ -238,3 +243,5 @@ void RequestManager::clear()
     ka_timeout_flag_  = false;
     dip_timeout_flag_ = false;
 }
+
+} /* namespace hdcp */

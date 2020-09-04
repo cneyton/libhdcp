@@ -46,6 +46,8 @@ public:
     void call_callback()      {cb_(*this);}
 
 private:
+    friend void inc_retry(Request& r);
+
     common::TimeoutQueue::Id  id_;
     Packet                    command_;
     Callback                  cb_;
@@ -86,7 +88,7 @@ public:
 private:
     using common::Thread::start;
 
-    static const uint max_retry_    = 4;
+    static const uint max_retry_  = 3;
 
     struct by_request {};
     struct by_command {};
@@ -127,7 +129,7 @@ private:
     void ka_timeout_cb(common::TimeoutQueue::Id id, int64_t now);
     void dip_timeout_cb(common::TimeoutQueue::Id id, int64_t now);
 
-    virtual void run();
+    void run() override;
     void clear();
 };
 
