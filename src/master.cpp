@@ -22,20 +22,28 @@ void Master::start()
 {
     if (is_running())
         return;
+    log_debug(logger_, "starting application...");
     common::Thread::start(true);
+    log_debug(logger_, "application started...");
 }
 
 void Master::stop()
 {
     if (!is_running())
         return;
+    log_debug(logger_, "stopping application...");
     common::Thread::stop();
-    // wake-up in case we were waiting to connect
-    cv_connection_.notify_all();
+    {
+        // wake-up in case we were waiting to connect
+        std::unique_lock<std::mutex> lk(mutex_connection_);
+        connection_requested_ = true;
+        cv_connection_.notify_all();
+    }
     if (joinable())
         join();
     transport_->stop();
     request_manager_.stop();
+    log_debug(logger_, "application stopped...");
 }
 
 void Master::send_command(Packet::BlockType id, const std::string& data, Request::Callback cb)
@@ -80,9 +88,12 @@ int Master::handler_state_disconnected()
         transport_->stop();
         request_manager_.stop_master_keepalive_management();
         request_manager_.stop();
-        // notify connection attempt failed
-        std::unique_lock<std::mutex> lk(mutex_connecting_);
-        cv_connecting_.notify_all();
+        if (connecting_) {
+            // notify connection attempt failed
+            std::unique_lock<std::mutex> lk(mutex_connecting_);
+            connecting_ = false;
+            cv_connecting_.notify_all();
+        }
     }
 
     log_debug(logger_, "waiting connection request...");
@@ -94,6 +105,7 @@ int Master::handler_state_connecting()
 {
     if (statemachine_.get_nb_loop_in_current_state() == 1) {
         connection_requested_ = false;
+        connecting_ = true;
         transport_->clear_queues();
         transport_->start();
         request_manager_.start();
@@ -126,6 +138,7 @@ int Master::handler_state_connected()
         request_manager_.start_master_keepalive_management(keepalive_interval, keepalive_timeout);
 
         std::unique_lock<std::mutex> lk(mutex_connecting_);
+        connecting_ = false;
         cv_connecting_.notify_all();
     }
 

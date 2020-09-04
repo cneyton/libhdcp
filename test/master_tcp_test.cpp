@@ -26,7 +26,9 @@ int main(int argc, char* argv[])
 
     master.start();
     master.connect();
-    master.wait_connected();
+    if (!master.wait_connected())
+        throw application_error("connection failed");
+
     std::this_thread::sleep_for(std::chrono::seconds(1));
     std::string cmd_data("test");
     master.send_command(0, cmd_data,
@@ -45,6 +47,6 @@ int main(int argc, char* argv[])
                             }
                         });
 
-    std::this_thread::sleep_for(std::chrono::seconds(1000));
+    std::this_thread::sleep_for(std::chrono::seconds(30));
     master.stop();
 }

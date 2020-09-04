@@ -77,6 +77,7 @@ private:
     std::condition_variable cv_connection_;
     std::mutex              mutex_connecting_;
     std::condition_variable cv_connecting_;
+    bool                    connecting_ = false;
 
     common::Statemachine<State>   statemachine_;
     std::unique_ptr<Transport>    transport_;
