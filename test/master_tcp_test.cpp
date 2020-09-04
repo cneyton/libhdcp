@@ -20,13 +20,31 @@ int main(int argc, char* argv[])
     logger->set_level(spdlog::level::debug);
 
     Identification id {"client", "0001", "0.0.01", "0.1.02"};
-    TcpClient client(logger, argv[1], argv[2]);
-    Master master(logger, &client, data_cb, id);
+    Master master(logger, id,
+                  std::make_unique<TcpClient>(logger, argv[1], argv[2]),
+                  data_cb);
 
-    client.start();
     master.start();
     master.connect();
+    master.wait_connected();
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+    std::string cmd_data("test");
+    master.send_command(0, cmd_data,
+                        [logger](Request& r)
+                        {
+                            switch (r.get_status()) {
+                            case Request::Status::pending:
+                                log_info(logger, "pending");
+                                break;
+                            case Request::Status::timeout:
+                                log_info(logger, "timeout");
+                                break;
+                            case Request::Status::fulfilled:
+                                log_info(logger, "fulfilled");
+                                break;
+                            }
+                        });
+
     std::this_thread::sleep_for(std::chrono::seconds(1000));
     master.stop();
-    client.stop();
 }

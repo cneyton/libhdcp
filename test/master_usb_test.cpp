@@ -25,13 +25,13 @@ int main(int argc, char* argv[])
     logger->set_level(spdlog::level::trace);
 
     Identification id {"client", "0001", "0.0.01", "0.1.02"};
-    UsbAsync  usb(logger, itfc_nb, vendor_id, product_id, in_endpoint, out_endpoint);
-    Master master(logger, &usb, data_cb, id);
+    Master master(logger, id,
+                  std::make_unique<UsbAsync>(logger, itfc_nb, vendor_id,
+                                             product_id, in_endpoint, out_endpoint),
+                  data_cb);
 
-    usb.start();
     master.start();
     master.connect();
     std::this_thread::sleep_for(std::chrono::seconds(1000));
     master.stop();
-    usb.stop();
 }

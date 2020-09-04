@@ -20,10 +20,8 @@ int main(int argc, char* argv[])
 
     Identification id {"server", "0001", "0.0.01", "0.1.02"};
     uint16_t port = std::stoi(argv[1]);
-    TcpServer server(logger, port);
-    Slave slave(logger, &server, cmd_cb, id);
+    Slave slave(logger, id, std::make_unique<TcpServer>(logger, port), cmd_cb);
 
-    server.start();
     slave.start();
     slave.wait_connected();
     std::string data(1000, 'a');
@@ -38,5 +36,4 @@ int main(int argc, char* argv[])
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
     slave.stop();
-    server.stop();
 }
