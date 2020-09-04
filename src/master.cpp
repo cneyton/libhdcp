@@ -85,7 +85,7 @@ int Master::handler_state_disconnected()
         cv_connecting_.notify_all();
     }
 
-    log_trace(logger_, "wait connection");
+    log_debug(logger_, "waiting connection request...");
     wait_connection_request();
     return 0;
 }
@@ -193,7 +193,7 @@ void Master::run()
 void Master::wait_connection_request()
 {
     std::unique_lock<std::mutex> lk(mutex_connection_);
-    cv_connection_.wait(lk);
+    cv_connection_.wait(lk, [this]{return connection_requested_ ? true:false;});
 }
 
 void Master::set_device_id(const Packet& p)
