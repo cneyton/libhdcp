@@ -22,7 +22,7 @@ void Slave::start()
 {
     if (is_running())
         return;
-    common::Thread::start(0);
+    common::Thread::start(true);
 }
 
 void Slave::stop()
@@ -60,6 +60,12 @@ void Slave::disconnect()
     disconnection_requested_ = true;
 }
 
+int Slave::handler_state_init()
+{
+    notify_running(0);
+    return 0;
+}
+
 int Slave::handler_state_disconnected()
 {
     if (statemachine_.get_nb_loop_in_current_state() == 1) {
@@ -68,7 +74,6 @@ int Slave::handler_state_disconnected()
         request_manager_.stop();
         transport_->clear_queues();
         transport_->start();
-        return 0;
     }
 
     Packet p;
