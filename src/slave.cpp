@@ -7,7 +7,7 @@ Slave::Slave(common::Logger logger, const Identification& id,
              std::unique_ptr<Transport> transport, CmdCallback cmd_cb):
     common::Log(logger),
     statemachine_(logger, "com_slave", states_, State::init),
-    transport_(std::move(transport)), request_manager_(logger, transport.get()),
+    transport_(std::move(transport)), request_manager_(logger, transport_.get()),
     id_(id), cmd_cb_(cmd_cb)
 {
     statemachine_.display_trace();
