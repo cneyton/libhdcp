@@ -24,7 +24,7 @@ void Master::start()
         return;
     log_debug(logger_, "starting application...");
     common::Thread::start(true);
-    log_debug(logger_, "application started...");
+    log_debug(logger_, "application started");
 }
 
 void Master::stop()
@@ -43,7 +43,7 @@ void Master::stop()
         join();
     transport_->stop();
     request_manager_.stop();
-    log_debug(logger_, "application stopped...");
+    log_debug(logger_, "application stopped");
 }
 
 void Master::send_command(Packet::BlockType id, const std::string& data, Request::Callback cb)
@@ -54,20 +54,22 @@ void Master::send_command(Packet::BlockType id, const std::string& data, Request
     request_manager_.send_command(id, data, cb, command_timeout_);
 }
 
-void Master::connect()
+std::pair<bool, Identification> Master::connect()
 {
-    /* TODO: check if already connected  <01-09-20, cneyton> */
-    std::unique_lock<std::mutex> lk(mutex_connection_);
-    disconnection_requested_ = false;
-    connection_requested_ = true;
-    cv_connection_.notify_all();
-}
+    if (get_state() != State::disconnected)
+        return std::make_pair(statemachine_.get_state() == State::connected, device_id_);
 
-bool Master::wait_connected()
-{
+    {
+        // wake-up in case we were waiting to connect
+        std::unique_lock<std::mutex> lk(mutex_connection_);
+        disconnection_requested_ = false;
+        connection_requested_ = true;
+        cv_connection_.notify_all();
+    }
     std::unique_lock<std::mutex> lk(mutex_connecting_);
-    cv_connecting_.wait(lk);
-    return statemachine_.get_state() == State::connected;
+    connecting_ = true;
+    cv_connecting_.wait(lk, [this]{return !connecting_;});
+    return std::make_pair(statemachine_.get_state() == State::connected, device_id_);
 }
 
 void Master::disconnect()
@@ -85,6 +87,7 @@ int Master::handler_state_disconnected()
 {
     if (statemachine_.get_nb_loop_in_current_state() == 1) {
         disconnection_requested_ = false;
+        device_id_ = Identification();
         transport_->stop();
         request_manager_.stop_master_keepalive_management();
         request_manager_.stop();
@@ -105,7 +108,6 @@ int Master::handler_state_connecting()
 {
     if (statemachine_.get_nb_loop_in_current_state() == 1) {
         connection_requested_ = false;
-        connecting_ = true;
         transport_->clear_queues();
         transport_->start();
         request_manager_.start();

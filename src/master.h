@@ -30,8 +30,9 @@ public:
 
     void start();
     void stop() override;
-    void connect();
-    bool wait_connected();
+    /* TODO: add async connect with cb when connected <07-09-20, cneyton> */
+    //void async_connect(std::function<void(bool, Identification)>);
+    std::pair<bool, Identification> connect();
     void disconnect();
     void send_command(Packet::BlockType id, const std::string& data, Request::Callback cb);
 

@@ -25,8 +25,8 @@ int main(int argc, char* argv[])
                   data_cb);
 
     master.start();
-    master.connect();
-    if (!master.wait_connected())
+    auto [success, slave_id] = master.connect();
+    if (!success)
         throw application_error("connection failed");
 
     std::this_thread::sleep_for(std::chrono::seconds(1));
