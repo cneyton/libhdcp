@@ -36,7 +36,6 @@ void Master::stop()
     {
         // wake-up in case we were waiting to connect
         std::unique_lock<std::mutex> lk(mutex_connection_);
-        connection_requested_ = true;
         cv_connection_.notify_all();
     }
     if (joinable())
@@ -208,7 +207,7 @@ void Master::run()
 void Master::wait_connection_request()
 {
     std::unique_lock<std::mutex> lk(mutex_connection_);
-    cv_connection_.wait(lk, [this]{return connection_requested_ ? true:false;});
+    cv_connection_.wait(lk, [this]{return (connection_requested_ || !is_running());});
 }
 
 void Master::set_device_id(const Packet& p)
