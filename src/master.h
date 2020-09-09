@@ -27,6 +27,7 @@ public:
 
     State get_state() const {return statemachine_.get_state();};
     const Identification& get_device_id() const {return device_id_;}
+    const Identification& get_host_id()   const {return host_id_;}
 
     void start();
     void stop() override;
