@@ -179,7 +179,7 @@ void RequestManager::cmd_timeout_cb(common::TimeoutQueue::Id id, int64_t)
     if (search == set_by_request.end())
         throw hdcp::application_error("request id not found, you should not be here");
 
-    if (search->get_retry() <= max_retry_) {
+    if (search->get_retry() < max_retry_) {
         log_warn(logger_, "command {} timeout, try = {}", search->get_command().id(),
                  search->get_retry());
         set_by_request.modify(search, &inc_retry);
