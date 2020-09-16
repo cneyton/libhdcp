@@ -4,11 +4,10 @@
 using namespace hdcp;
 
 Master::Master(common::Logger logger, const Identification& host_id,
-               std::unique_ptr<Transport> transport, DataCallback data_cb):
-    common::Log(logger),
-    statemachine_(logger, "com_master", states_, State::init),
-    transport_(std::move(transport)), request_manager_(logger, transport_.get()),
-    host_id_(host_id), data_cb_(data_cb)
+               std::unique_ptr<Transport> transport):
+    common::Log(logger), statemachine_(logger, "com_master", states_, State::init),
+    transport_(std::move(transport)), request_manager_(logger, transport_.get(), this),
+    host_id_(host_id)
 {
     statemachine_.display_trace();
 }
@@ -53,10 +52,10 @@ void Master::send_command(Packet::BlockType id, const std::string& data, Request
     request_manager_.send_command(id, data, cb, command_timeout_);
 }
 
-std::pair<bool, Identification> Master::connect()
+const Identification& Master::connect()
 {
     if (get_state() != State::disconnected)
-        return std::make_pair(statemachine_.get_state() == State::connected, device_id_);
+        return device_id_;
 
     {
         // wake-up in case we were waiting to connect
@@ -68,7 +67,9 @@ std::pair<bool, Identification> Master::connect()
     std::unique_lock<std::mutex> lk(mutex_connecting_);
     connecting_ = true;
     cv_connecting_.wait(lk, [this]{return !connecting_;});
-    return std::make_pair(statemachine_.get_state() == State::connected, device_id_);
+    if (statemachine_.get_state() != State::connected)
+        throw application_error("connection failed");
+    return device_id_;
 }
 
 void Master::disconnect()
@@ -88,7 +89,7 @@ int Master::handler_state_disconnected()
         disconnection_requested_ = false;
         device_id_ = Identification();
         transport_->stop();
-        request_manager_.stop_master_keepalive_management();
+        request_manager_.stop_keepalive_management();
         request_manager_.stop();
         if (connecting_) {
             // notify connection attempt failed
@@ -136,8 +137,7 @@ int Master::handler_state_connected()
 {
     if (statemachine_.get_nb_loop_in_current_state() == 1) {
         dip_received_ = false;
-        request_manager_.start_master_keepalive_management(keepalive_interval, keepalive_timeout);
-
+        request_manager_.start_keepalive_management(keepalive_interval, keepalive_timeout);
         std::unique_lock<std::mutex> lk(mutex_connecting_);
         connecting_ = false;
         cv_connecting_.notify_all();
@@ -153,7 +153,8 @@ int Master::handler_state_connected()
         request_manager_.ack_command(p);
         break;
     case Packet::Type::data:
-        data_cb_(p);
+        if (data_cb_)
+            data_cb_(p);
         break;
     case Packet::Type::ka_ack:
         request_manager_.ack_keepalive();
@@ -186,11 +187,10 @@ int Master::check_connected()
 
 int Master::check_disconnected()
 {
-    if (disconnection_requested_ || request_manager_.dip_timeout() ||
-        request_manager_.keepalive_timeout() || !transport_->is_open())
+    if (disconnection_requested_)
         return common::statemachine::goto_next_state;
-    else
-        return common::statemachine::stay_curr_state;
+
+    return common::statemachine::stay_curr_state;
 }
 
 void Master::run()
@@ -198,8 +198,14 @@ void Master::run()
     while (is_running()) {
         try {
             statemachine_.wakeup();
-        } catch (hdcp::packet_error& e) {
-            log_warn(logger_, e.what());
+        } catch (transport_error& e) {
+            log_error(logger_, e.what());
+            if (error_cb_)
+                error_cb_(0);
+            disconnection_requested_ = true;
+        } catch (std::exception& e) {
+            log_error(logger_, e.what());
+            disconnection_requested_ = true;
         }
     }
 }
@@ -233,4 +239,20 @@ void Master::set_device_id(const Packet& p)
         }
     }
     log_debug(logger_, "device {}", device_id_);
+}
+
+void Master::keepalive_timed_out()
+{
+    log_error(logger_, "keepalive timeout");
+    if (error_cb_)
+        error_cb_(0);
+    disconnection_requested_ = true;
+}
+
+void Master::dip_timed_out()
+{
+    log_error(logger_, "dip timeout");
+    if (error_cb_)
+        error_cb_(0);
+    disconnection_requested_ = true;
 }

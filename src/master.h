@@ -13,7 +13,8 @@ namespace hdcp {
 class Master: public common::Log, private common::Thread
 {
 public:
-    using DataCallback = std::function<void(const Packet&)>;
+    using DataCallback  = std::function<void(const Packet&)>;
+    using ErrorCallback = std::function<void(int ec)>;
     enum class State {
         init,
         disconnected,
@@ -21,8 +22,12 @@ public:
         connected
     };
 
-    Master(common::Logger logger, const Identification& host_id,
-           std::unique_ptr<Transport> transport, DataCallback data_cb);
+    enum class Error {
+        dip_timeout,
+        ka_timeout,
+    };
+
+    Master(common::Logger logger, const Identification& id, std::unique_ptr<Transport> transport);
     virtual ~Master();
 
     State get_state() const {return statemachine_.get_state();};
@@ -31,13 +36,15 @@ public:
 
     void start();
     void stop() override;
-    /* TODO: add async connect with cb when connected <07-09-20, cneyton> */
-    //void async_connect(std::function<void(bool, Identification)>);
-    std::pair<bool, Identification> connect();
+    void set_data_cb(DataCallback&& cb)   {data_cb_  = std::forward<DataCallback>(cb);}
+    void set_error_cb(ErrorCallback&& cb) {error_cb_ = std::forward<ErrorCallback>(cb);}
+    /// Synchronous connect
+    const Identification& connect();
     void disconnect();
     void send_command(Packet::BlockType id, const std::string& data, Request::Callback cb);
 
 private:
+    friend MasterRequestManager;
     using common::Thread::start;
 
     int handler_state_init();
@@ -83,14 +90,17 @@ private:
 
     common::Statemachine<State>   statemachine_;
     std::unique_ptr<Transport>    transport_;
-    RequestManager                request_manager_;
+    MasterRequestManager          request_manager_;
     Identification                host_id_;
     Identification                device_id_;
     DataCallback                  data_cb_;
+    ErrorCallback                 error_cb_;
 
     void run() override;
     void wait_connection_request();
     void set_device_id(const Packet& p);
+    void keepalive_timed_out();
+    void dip_timed_out();
 };
 
 } /* namespace hdcp */

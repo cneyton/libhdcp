@@ -7,7 +7,7 @@ Slave::Slave(common::Logger logger, const Identification& id,
              std::unique_ptr<Transport> transport, CmdCallback cmd_cb):
     common::Log(logger),
     statemachine_(logger, "com_slave", states_, State::init),
-    transport_(std::move(transport)), request_manager_(logger, transport_.get()),
+    transport_(std::move(transport)), request_manager_(logger, transport_.get(), this),
     id_(id), cmd_cb_(cmd_cb)
 {
     statemachine_.display_trace();
@@ -70,7 +70,7 @@ int Slave::handler_state_disconnected()
 {
     if (statemachine_.get_nb_loop_in_current_state() == 1) {
         disconnection_requested_ = false;
-        request_manager_.stop_slave_keepalive_management();
+        request_manager_.stop_keepalive_management();
         request_manager_.stop();
         transport_->clear_queues();
         transport_->start();
@@ -87,7 +87,7 @@ int Slave::handler_state_disconnected()
         set_master_id(p);
         request_manager_.start();
         request_manager_.send_dip(id_);
-        request_manager_.start_slave_keepalive_management(keepalive_timeout);
+        request_manager_.start_keepalive_management(keepalive_timeout);
         break;
     default:
         log_warn(logger_, "you should only receive hip in disconnected state");
@@ -144,7 +144,8 @@ int Slave::handler_state_connected()
         break;
     case Packet::Type::cmd:
         // The cb should send an ack if the cmd is well formated
-        cmd_cb_(p);
+        if (cmd_cb_)
+            cmd_cb_(p);
         break;
     case Packet::Type::ka:
         request_manager_.keepalive();
@@ -177,11 +178,10 @@ int Slave::check_connected()
 
 int Slave::check_disconnected()
 {
-    if (disconnection_requested_ || request_manager_.keepalive_timeout()
-        || !transport_->is_open())
+    if (disconnection_requested_)
         return common::statemachine::goto_next_state;
-    else
-        return common::statemachine::stay_curr_state;
+
+    return common::statemachine::stay_curr_state;
 }
 
 void Slave::run()
@@ -216,4 +216,12 @@ void Slave::set_master_id(const Packet& p)
         }
     }
     log_debug(logger_, "master {}", master_id_);
+}
+
+void Slave::keepalive_timed_out()
+{
+    log_error(logger_, "keepalive timeout");
+    if (error_cb_)
+        error_cb_(0);
+    disconnection_requested_ = true;
 }

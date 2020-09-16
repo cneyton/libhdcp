@@ -13,7 +13,8 @@ namespace hdcp {
 class Slave: public common::Log, private common::Thread
 {
 public:
-    using CmdCallback = std::function<void(const Packet&)>;
+    using CmdCallback   = std::function<void(const Packet&)>;
+    using ErrorCallback = std::function<void(int ec)>;
     enum class State {
         init,
         disconnected,
@@ -21,8 +22,7 @@ public:
         connected
     };
 
-    Slave(common::Logger logger, const Identification& id,
-          std::unique_ptr<Transport> transport, CmdCallback cmd_cb);
+    Slave(common::Logger logger, const Identification& id, std::unique_ptr<Transport> transport);
     virtual ~Slave();
 
     State get_state() const {return statemachine_.get_state();};
@@ -30,12 +30,15 @@ public:
 
     void start();
     void stop() override;
+    void set_cmd_cb(CmdCallback&& cb)     {cmd_cb_  = std::forward<CmdCallback>(cb);}
+    void set_error_cb(ErrorCallback&& cb) {error_cb_ = std::forward<ErrorCallback>(cb);}
     void wait_connected();
     void disconnect();
     void send_data(std::vector<Packet::Block>& blocks);
     void send_cmd_ack(const Packet& packet);
 
 private:
+    friend SlaveRequestManager;
     using common::Thread::start;
 
     int handler_state_init();
@@ -79,13 +82,15 @@ private:
 
     common::Statemachine<State>   statemachine_;
     std::unique_ptr<Transport>    transport_;
-    RequestManager                request_manager_;
+    SlaveRequestManager           request_manager_;
     Identification                id_;
     Identification                master_id_;
     CmdCallback                   cmd_cb_;
+    ErrorCallback                 error_cb_;
 
     void run() override;
     void set_master_id(const Packet& p);
+    void keepalive_timed_out();
 };
 
 } /* namespace hdcp */
