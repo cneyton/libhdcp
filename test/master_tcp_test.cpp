@@ -21,13 +21,11 @@ int main(int argc, char* argv[])
 
     Identification id {"client", "0001", "0.0.01", "0.1.02"};
     Master master(logger, id,
-                  std::make_unique<TcpClient>(logger, argv[1], argv[2]),
-                  data_cb);
+                  std::make_unique<TcpClient>(logger, argv[1], argv[2]));
+    master.set_data_cb(data_cb);
 
     master.start();
-    auto [success, slave_id] = master.connect();
-    if (!success)
-        throw application_error("connection failed");
+    auto slave_id = master.connect();
 
     std::this_thread::sleep_for(std::chrono::seconds(1));
     std::string cmd_data("test");
