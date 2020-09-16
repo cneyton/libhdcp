@@ -4,11 +4,10 @@
 using namespace hdcp;
 
 Slave::Slave(common::Logger logger, const Identification& id,
-             std::unique_ptr<Transport> transport, CmdCallback cmd_cb):
-    common::Log(logger),
-    statemachine_(logger, "com_slave", states_, State::init),
+             std::unique_ptr<Transport> transport):
+    common::Log(logger), statemachine_(logger, "com_slave", states_, State::init),
     transport_(std::move(transport)), request_manager_(logger, transport_.get(), this),
-    id_(id), cmd_cb_(cmd_cb)
+    id_(id)
 {
     statemachine_.display_trace();
 }
