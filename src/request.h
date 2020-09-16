@@ -56,31 +56,22 @@ private:
     uint                      retry_  = 0;
 };
 
-class RequestManager: public common::Log, public common::Thread
+class Master;
+class MasterRequestManager: public common::Log, public common::Thread
 {
 public:
-    RequestManager(common::Log logger, Transport* transport):
-        Log(logger), transport_(transport) {}
-    virtual ~RequestManager() {}
+    MasterRequestManager(common::Log logger, Transport * transport, Master * master):
+        Log(logger), transport_(transport), master_(master) {}
 
     void send_command(Packet::BlockType type, const std::string& data,
                       Request::Callback request_cb, std::chrono::milliseconds timeout);
-    void send_cmd_ack(const Packet& packet);
-    void send_data(std::vector<Packet::Block>& blocks);
     void send_hip(const Identification& id, std::chrono::milliseconds timeout);
-    void send_dip(const Identification& id);
-    void start_master_keepalive_management(std::chrono::milliseconds keepalive_interval,
-                                           std::chrono::milliseconds keepalive_timeout);
-    void start_slave_keepalive_management(std::chrono::milliseconds keepalive_timeout);
-    void stop_master_keepalive_management();
-    void stop_slave_keepalive_management();
+    void start_keepalive_management(std::chrono::milliseconds keepalive_interval,
+                                    std::chrono::milliseconds keepalive_timeout);
+    void stop_keepalive_management();
     void ack_command(Packet& packet);
     void ack_dip();
     void ack_keepalive();
-    void keepalive();
-
-    bool keepalive_timeout() const {return ka_timeout_flag_;}
-    bool dip_timeout()       const {return dip_timeout_flag_;}
 
     void start();
     void stop() override;
@@ -115,10 +106,9 @@ private:
     common::TimeoutQueue::Id keepalive_id_;
     common::TimeoutQueue::Id keepalive_mngt_id_;
     common::TimeoutQueue::Id dip_id_;
-    std::atomic_bool ka_timeout_flag_  = false;
-    std::atomic_bool dip_timeout_flag_ = false;
 
-    Transport* transport_;
+    Transport * transport_;
+    Master    * master_;
 
     /*
      * This cb resend a keep-alive every timeout_keepalive
@@ -128,6 +118,43 @@ private:
     void cmd_timeout_cb(common::TimeoutQueue::Id id, int64_t now);
     void ka_timeout_cb(common::TimeoutQueue::Id id, int64_t now);
     void dip_timeout_cb(common::TimeoutQueue::Id id, int64_t now);
+
+    void run() override;
+    void clear();
+};
+
+class Slave;
+class SlaveRequestManager: public common::Log, public common::Thread
+{
+public:
+    SlaveRequestManager(common::Log logger, Transport * transport, Slave * slave):
+        Log(logger), transport_(transport), slave_(slave) {}
+
+    void send_cmd_ack(const Packet& packet);
+    void send_data(std::vector<Packet::Block>& blocks);
+    void send_dip(const Identification& id);
+    void start_keepalive_management(std::chrono::milliseconds keepalive_timeout);
+    void stop_keepalive_management();
+    void keepalive();
+
+    void start();
+    void stop() override;
+
+private:
+    using common::Thread::start;
+
+    int64_t                 now_ = 0;
+    std::atomic<Packet::Id> packet_id_ = 0;
+
+    int64_t timeout_keepalive_;
+
+    common::TimeoutQueue     timeout_queue_;
+    common::TimeoutQueue::Id keepalive_id_;
+
+    Transport * transport_;
+    Slave     * slave_;
+
+    void ka_timeout_cb(common::TimeoutQueue::Id id, int64_t now);
 
     void run() override;
     void clear();
