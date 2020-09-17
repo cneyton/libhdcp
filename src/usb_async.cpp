@@ -58,7 +58,7 @@ void Transfer::notify_cancelled()
 RTransfer::RTransfer(libusb_device_handle * device_handle): device_handle_(device_handle)
 {
     if (!device_handle)
-        throw::transport_error("device handle nullptr");
+        throw transport_error("device handle nullptr");
 
     if (!(buf_ = libusb_dev_mem_alloc(device_handle, Packet::max_size)))
         throw std::bad_alloc();
@@ -110,14 +110,14 @@ void UsbAsync::open()
     log_debug(logger_, "opening transport...");
 
     if (!(device_handle_ = libusb_open_device_with_vid_pid(ctx_, vendor_id_, product_id_)))
-        throw hdcp::transport_error("device not found");
+        throw libusb_error(LIBUSB_ERROR_NO_DEVICE);
 
     int ret = libusb_set_auto_detach_kernel_driver(device_handle_, kernel_auto_detach_driver);
     if (ret < 0)
-        throw hdcp::libusb_error(ret);
+        throw libusb_error(ret);
 
     if ((ret = libusb_claim_interface(device_handle_, itfc_nb_)) < 0)
-        throw hdcp::libusb_error(ret);
+        throw libusb_error(ret);
 
     wtransfer_      = new WTransfer();
     rtransfer_curr_ = new RTransfer(device_handle_);
@@ -156,12 +156,12 @@ void UsbAsync::close()
 void UsbAsync::write(Packet&& p)
 {
     if (!is_open())
-        throw hdcp::transport_error("can't write while transport is closed");
+        throw transport_error("can't write while transport is closed");
 
     std::lock_guard<std::mutex> lk(mutex_wprogress_);
     if (wtransfer_->in_progress()) {
         if (!write_queue_.try_enqueue(std::forward<Packet>(p)))
-            throw hdcp::transport_error("write queue full");
+            throw transport_error("write queue full", transport_error::Code::write_queue_full);
     } else {
         wtransfer_->packet() = std::forward<Packet>(p);
         fill_transfer(wtransfer_);
@@ -210,10 +210,9 @@ void UsbAsync::write_cb(libusb_transfer * transfer) noexcept
                 break;
             }
             case LIBUSB_TRANSFER_CANCELLED:
-            {
+                log_debug(usb->get_logger(), "write transfer cancelled");
                 usb->wtransfer_->notify_cancelled();
                 break;
-            }
             case LIBUSB_TRANSFER_TIMED_OUT:
             case LIBUSB_TRANSFER_STALL:
             case LIBUSB_TRANSFER_NO_DEVICE:
@@ -247,34 +246,69 @@ void UsbAsync::read_cb(libusb_transfer * transfer) noexcept
 
                 if (!usb->read_queue_.try_enqueue(std::string_view((char*)transfer->buffer,
                                                                    transfer->actual_length)))
-                    throw hdcp::transport_error("read queue full");
+                    throw transport_error("read queue full",
+                                          transport_error::Code::read_queue_full);
                 break;
             }
             case LIBUSB_TRANSFER_CANCELLED:
-            {
+                log_debug(usb->get_logger(), "read transfer cancelled");
                 usb->rtransfer_curr_->notify_cancelled();
                 break;
-            }
-            case LIBUSB_TRANSFER_STALL:
             case LIBUSB_TRANSFER_NO_DEVICE:
+                throw libusb_error(transfer->status);
+            case LIBUSB_TRANSFER_STALL:
             case LIBUSB_TRANSFER_OVERFLOW:
             case LIBUSB_TRANSFER_TIMED_OUT:
             case LIBUSB_TRANSFER_ERROR:
-                throw libusb_error(transfer->status);
+            {
+                // resbmit transfer, if the problem persists the application will close
+                RTransfer * tmp = usb->rtransfer_curr_;
+                usb->rtransfer_curr_ = usb->rtransfer_prev_;
+                usb->rtransfer_curr_->submit();
+                usb->rtransfer_prev_ = tmp;
+                break;
+            }
             default:
                 log_error(usb->get_logger(), "unknown transfer status, you should not be here");
         }
+    } catch (libusb_error& e) {
+        log_error(usb->get_logger(), e.what());
+        // nothing to do, the application will close after timeout
+        switch (e.error_code()) {
+        case LIBUSB_ERROR_NO_DEVICE:
+            usb->error_mask_[Error::device_not_found] = true;
+            break;
+        case LIBUSB_ERROR_BUSY:
+            usb->error_mask_[Error::busy] = true;
+            break;
+        default:
+            usb->error_mask_[Error::other] = true;
+        }
     } catch (std::exception& e) {
+        // packet error & transport error will result in the data being discarded
         log_error(usb->get_logger(), e.what());
     }
 }
 
 void UsbAsync::run()
 {
-    rtransfer_curr_->submit();
-    notify_running(0);
-    while (is_running()) {
-        libusb_handle_events(ctx_);
+    try {
+        rtransfer_curr_->submit();
+        notify_running(0);
+        while (is_running()) {
+            libusb_handle_events(ctx_);
+        }
+    } catch (libusb_error& e) {
+        switch (e.error_code()) {
+        case LIBUSB_ERROR_NO_DEVICE:
+            error_mask_[Error::device_not_found] = true;
+            break;
+        case LIBUSB_ERROR_BUSY:
+            error_mask_[Error::busy] = true;
+            break;
+        default:
+            error_mask_[Error::other] = true;
+        }
     }
 }
 

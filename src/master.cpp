@@ -109,6 +109,7 @@ int Master::handler_state_connecting()
     if (statemachine_.get_nb_loop_in_current_state() == 1) {
         connection_requested_ = false;
         transport_->clear_queues();
+        transport_->clear_error();
         transport_->start();
         request_manager_.start();
         request_manager_.send_hip(host_id_, connecting_timeout_);

@@ -2,6 +2,7 @@
 
 #include <chrono>
 #include <string>
+#include <bitset>
 
 #include "common/readerwriterqueue.h"
 #include "common/concurrentqueue.h"
@@ -18,6 +19,7 @@ constexpr uint64_t timeout_write = time_base_ms.count();
 class Transport
 {
 public:
+    using Status = std::bitset<32>;
     Transport(): write_queue_(max_queue_size), read_queue_(max_queue_size) {};
     virtual ~Transport() = default;
 
@@ -41,9 +43,13 @@ public:
         while (write_queue_.try_dequeue(p)) {}
     }
 
+    Status status() const {return status_;}
+    void clear_error() {status_ = 0;}
+
 protected:
     common::ConcurrentQueue<Packet>           write_queue_;
     common::BlockingReaderWriterQueue<Packet> read_queue_;
+    Status status_;
 
 private:
     // disable copy ctor, copy assignment, move ctor & move assignment

@@ -79,6 +79,22 @@ public:
 private:
     using common::Thread::start;
 
+    // there should be at most 32 different errors
+    enum Error {
+        device_not_found,
+        not_found,
+        busy,
+        other,
+        rtransfer_stall,
+        rtransfer_overflow,
+        rtransfer_timed_out,
+        rtransfer_error,
+        wtransfer_stall,
+        wtransfer_overflow,
+        wtransfer_timed_out,
+        wtransfer_error,
+    };
+
     libusb_context       * ctx_ = nullptr;
     libusb_device_handle * device_handle_ = nullptr;
 
