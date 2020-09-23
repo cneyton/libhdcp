@@ -47,7 +47,7 @@ void RequestManager::send_command(Packet::BlockType type, const std::string& dat
     {
         std::unique_lock<std::mutex> lk(requests_mutex_);
         if (!requests_.insert({id, cmd, std::move(request_cb)}).second)
-            throw hdcp::application_error("a request with the same packet id is pending");
+            throw hdcp::application_error(fmt::format("a request with the same packet id {} is pending", cmd.id()));
     }
 }
 
@@ -151,7 +151,7 @@ void RequestManager::ack_command(Packet& packet)
     r.call_callback();
 
     timeout_queue_.erase(r.get_id());
-    set_by_command.erase(packet.id());
+    set_by_command.erase(id);
 }
 
 void RequestManager::ack_keepalive()
