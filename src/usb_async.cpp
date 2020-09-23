@@ -143,6 +143,9 @@ void UsbAsync::close()
     rtransfer_curr_ = nullptr;
     rtransfer_prev_ = nullptr;
     // close
+    int ret;
+    if ((ret = libusb_release_interface(device_handle_, itfc_nb_)) < 0)
+        throw hdcp::libusb_error(ret);
     libusb_close(device_handle_);
     device_handle_ = nullptr;
 
