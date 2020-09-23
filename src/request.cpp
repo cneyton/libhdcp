@@ -31,6 +31,14 @@ void RequestManager::send_command(Packet::BlockType type, const std::string& dat
                                      std::bind(&RequestManager::cmd_timeout_cb, this,
                                                std::placeholders::_1, std::placeholders::_2));
 
+
+    // reset keepalive mngt
+    timeout_queue_.erase(keepalive_mngt_id_);
+    keepalive_mngt_id_ =
+        timeout_queue_.add_repeating(now_, keepalive_interval.count()/time_base_ms.count(),
+                                     std::bind(&RequestManager::ka_mngt_timeout_cb, this,
+                                               std::placeholders::_1, std::placeholders::_2));
+
     // send command
     Packet cmd = Packet::make_command(++packet_id_, type, data);
     transport_->write(cmd);
@@ -186,6 +194,13 @@ void RequestManager::cmd_timeout_cb(common::TimeoutQueue::Id id, int64_t)
         if (!transport_)
             throw hdcp::application_error("transport null pointer");
         transport_->write(search->get_command());
+
+        // reset keepalive mngt
+        timeout_queue_.erase(keepalive_mngt_id_);
+        keepalive_mngt_id_ =
+            timeout_queue_.add_repeating(now_, keepalive_interval.count()/time_base_ms.count(),
+                                         std::bind(&RequestManager::ka_mngt_timeout_cb, this,
+                                                   std::placeholders::_1, std::placeholders::_2));
     } else {
         log_error(logger_, "command {} failed", search->get_command().id());
         Request r(*search);
