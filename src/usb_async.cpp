@@ -155,6 +155,7 @@ void UsbAsync::write(Packet&& p)
     if (!is_open())
         throw hdcp::transport_error("can't write while transport is closed");
 
+    std::lock_guard<std::mutex> lk(mutex_wprogress_);
     if (wtransfer_->in_progress()) {
         if (!write_queue_.try_enqueue(std::forward<Packet>(p)))
             throw hdcp::transport_error("write queue full");
@@ -192,9 +193,11 @@ void UsbAsync::write_cb(libusb_transfer * transfer) noexcept
     try {
         switch (transfer->status) {
             case LIBUSB_TRANSFER_COMPLETED:
+            {
                 log_trace(usb->get_logger(), "write cb: {:#x}",
                           fmt::join((uint8_t*)transfer->buffer,
                                     (uint8_t*)transfer->buffer + transfer->actual_length, "|"));
+                std::lock_guard<std::mutex> lk(usb->mutex_wprogress_);
                 if (usb->write_queue_.try_dequeue(usb->wtransfer_->packet())) {
                     usb->fill_transfer(usb->wtransfer_);
                     usb->wtransfer_->submit();
@@ -202,6 +205,7 @@ void UsbAsync::write_cb(libusb_transfer * transfer) noexcept
                     usb->wtransfer_->put_on_hold();
                 }
                 break;
+            }
             case LIBUSB_TRANSFER_CANCELLED:
             {
                 usb->wtransfer_->notify_cancelled();

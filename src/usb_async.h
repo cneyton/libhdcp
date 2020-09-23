@@ -85,6 +85,7 @@ private:
     RTransfer * rtransfer_curr_ = nullptr;
     RTransfer * rtransfer_prev_ = nullptr;
     WTransfer * wtransfer_      = nullptr;
+    std::mutex  mutex_wprogress_;
 
     bool open_ = false;
 
