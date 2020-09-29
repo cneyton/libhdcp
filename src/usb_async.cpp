@@ -58,7 +58,8 @@ void Transfer::notify_cancelled()
 RTransfer::RTransfer(libusb_device_handle * device_handle): device_handle_(device_handle)
 {
     if (!device_handle)
-        throw transport_error("device handle nullptr");
+        throw transport_error("device handle nullptr",
+                              transport_error::Code::other);
 
     if (!(buf_ = libusb_dev_mem_alloc(device_handle, Packet::max_size)))
         throw std::bad_alloc();
@@ -156,7 +157,8 @@ void UsbAsync::close()
 void UsbAsync::write(Packet&& p)
 {
     if (!is_open())
-        throw transport_error("can't write while transport is closed");
+        throw transport_error("can't write while transport is closed",
+                              transport_error::Code::not_permitted);
 
     std::lock_guard<std::mutex> lk(mutex_wprogress_);
     if (wtransfer_->in_progress()) {
@@ -172,7 +174,8 @@ void UsbAsync::write(Packet&& p)
 void UsbAsync::fill_transfer(WTransfer * transfer)
 {
     if (!transfer)
-        throw transport_error("transfer null pointer");
+        throw transport_error("transfer null pointer",
+                              transport_error::Code::other);
 
     libusb_fill_bulk_transfer(transfer->libusb_transfer_ptr(), device_handle_, out_endpoit_,
                               (uint8_t*)transfer->packet().data(), transfer->packet().size(),
@@ -182,7 +185,8 @@ void UsbAsync::fill_transfer(WTransfer * transfer)
 void UsbAsync::fill_transfer(RTransfer * transfer)
 {
     if (!transfer)
-        throw transport_error("transfer null pointer");
+        throw transport_error("transfer null pointer",
+                              transport_error::Code::other);
 
     libusb_fill_bulk_transfer(transfer->libusb_transfer_ptr(), device_handle_,
                               in_endoint_, transfer->get_buffer(), Packet::max_size,
@@ -274,16 +278,6 @@ void UsbAsync::read_cb(libusb_transfer * transfer) noexcept
     } catch (libusb_error& e) {
         log_error(usb->get_logger(), e.what());
         // nothing to do, the application will close after timeout
-        switch (e.error_code()) {
-        case LIBUSB_ERROR_NO_DEVICE:
-            usb->error_mask_[Error::device_not_found] = true;
-            break;
-        case LIBUSB_ERROR_BUSY:
-            usb->error_mask_[Error::busy] = true;
-            break;
-        default:
-            usb->error_mask_[Error::other] = true;
-        }
     } catch (std::exception& e) {
         // packet error & transport error will result in the data being discarded
         log_error(usb->get_logger(), e.what());
@@ -298,17 +292,8 @@ void UsbAsync::run()
         while (is_running()) {
             libusb_handle_events(ctx_);
         }
-    } catch (libusb_error& e) {
-        switch (e.error_code()) {
-        case LIBUSB_ERROR_NO_DEVICE:
-            error_mask_[Error::device_not_found] = true;
-            break;
-        case LIBUSB_ERROR_BUSY:
-            error_mask_[Error::busy] = true;
-            break;
-        default:
-            error_mask_[Error::other] = true;
-        }
+    } catch (std::exception& e) {
+        log_error(logger_, e.what());
     }
 }
 
