@@ -88,9 +88,9 @@ int Master::handler_state_disconnected()
     if (statemachine_.get_nb_loop_in_current_state() == 1) {
         disconnection_requested_ = false;
         slave_id_ = Identification();
-        transport_->stop();
         request_manager_.stop_keepalive_management();
         request_manager_.stop();
+        transport_->stop();
         if (connecting_) {
             // notify connection attempt failed
             std::unique_lock<std::mutex> lk(mutex_connecting_);
