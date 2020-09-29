@@ -16,13 +16,15 @@ TcpClient::~TcpClient()
 void TcpClient::write(Packet&& p)
 {
     if (!is_open())
-        throw hdcp::transport_error("can't write while transport is closed");
+        throw transport_error("can't write while transport is closed",
+                              transport_error::Code::not_permitted);
 
     boost::asio::post(io_context_,
         [this, p] ()
         {
             if (!write_queue_.try_enqueue(p))
-                throw hdcp::transport_error("write queue full");
+                throw transport_error("write queue full",
+                                      transport_error::Code::write_queue_full);
             if (!write_in_progress_)
                 do_write();
         });
@@ -134,7 +136,8 @@ void TcpClient::read_payload()
                 try {
                     read_packet_.parse_payload();
                     if (!read_queue_.try_enqueue(read_packet_))
-                        throw hdcp::transport_error("read queue full");
+                        throw transport_error("read queue full",
+                                              transport_error::Code::read_queue_full);
                 } catch (std::exception& e) {
                     log_error(logger_, "{}", e.what());
                 }
