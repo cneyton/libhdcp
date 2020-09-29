@@ -74,6 +74,18 @@ const Identification& Master::connect()
 
 void Master::disconnect()
 {
+    if (get_state() == State::disconnected)
+        return;
+    std::unique_lock<std::mutex> lk(mutex_disconnection_);
+    async_disconnect();
+    cv_disconnection_.wait(lk, [this]{return !disconnection_requested_;});
+}
+
+inline
+void Master::async_disconnect()
+{
+    if (get_state() == State::disconnected)
+        return;
     disconnection_requested_ = true;
 }
 
@@ -86,11 +98,12 @@ int Master::handler_state_init()
 int Master::handler_state_disconnected()
 {
     if (statemachine_.get_nb_loop_in_current_state() == 1) {
-        disconnection_requested_ = false;
         slave_id_ = Identification();
         request_manager_.stop_keepalive_management();
         request_manager_.stop();
         transport_->stop();
+        std::unique_lock<std::mutex> lk(mutex_disconnection_);
+        disconnection_requested_ = false;
         if (connecting_) {
             // notify connection attempt failed
             std::unique_lock<std::mutex> lk(mutex_connecting_);

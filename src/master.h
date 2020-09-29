@@ -40,7 +40,10 @@ public:
     void set_error_cb(ErrorCallback&& cb) {error_cb_ = std::forward<ErrorCallback>(cb);}
     /// Synchronous connect
     const Identification& connect();
+    /// Synchronous disconnect
     void disconnect();
+    /// Asynchronous disconnect
+    void async_disconnect();
     void send_command(Packet::BlockType id, const std::string& data, Request::Callback cb);
 
 private:
@@ -82,6 +85,8 @@ private:
     std::atomic_bool dip_received_            = false;
     std::atomic_bool disconnection_requested_ = false;
 
+    std::mutex              mutex_disconnection_;
+    std::condition_variable cv_disconnection_;
     std::mutex              mutex_connection_;
     std::condition_variable cv_connection_;
     std::mutex              mutex_connecting_;
