@@ -31,8 +31,8 @@ public:
     virtual ~Master();
 
     State get_state() const {return statemachine_.get_state();};
-    const Identification& get_device_id() const {return device_id_;}
-    const Identification& get_host_id()   const {return host_id_;}
+    const Identification& get_slave_id()  const {return slave_id_;}
+    const Identification& get_master_id() const {return master_id_;}
 
     void start();
     void stop() override;
@@ -91,14 +91,14 @@ private:
     common::Statemachine<State>   statemachine_;
     std::unique_ptr<Transport>    transport_;
     MasterRequestManager          request_manager_;
-    Identification                host_id_;
-    Identification                device_id_;
+    Identification                master_id_;
+    Identification                slave_id_;
     DataCallback                  data_cb_;
     ErrorCallback                 error_cb_;
 
     void run() override;
     void wait_connection_request();
-    void set_device_id(const Packet& p);
+    void set_slave_id(const Packet& p);
     void keepalive_timed_out();
     void dip_timed_out();
 };

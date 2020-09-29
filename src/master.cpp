@@ -3,11 +3,11 @@
 
 using namespace hdcp;
 
-Master::Master(common::Logger logger, const Identification& host_id,
+Master::Master(common::Logger logger, const Identification& master_id,
                std::unique_ptr<Transport> transport):
     common::Log(logger), statemachine_(logger, "com_master", states_, State::init),
     transport_(std::move(transport)), request_manager_(logger, transport_.get(), this),
-    host_id_(host_id)
+    master_id_(master_id)
 {
     statemachine_.display_trace();
 }
@@ -55,7 +55,7 @@ void Master::send_command(Packet::BlockType id, const std::string& data, Request
 const Identification& Master::connect()
 {
     if (get_state() != State::disconnected)
-        return device_id_;
+        return slave_id_;
 
     {
         // wake-up in case we were waiting to connect
@@ -69,7 +69,7 @@ const Identification& Master::connect()
     cv_connecting_.wait(lk, [this]{return !connecting_;});
     if (statemachine_.get_state() != State::connected)
         throw application_error("connection failed");
-    return device_id_;
+    return slave_id_;
 }
 
 void Master::disconnect()
@@ -87,7 +87,7 @@ int Master::handler_state_disconnected()
 {
     if (statemachine_.get_nb_loop_in_current_state() == 1) {
         disconnection_requested_ = false;
-        device_id_ = Identification();
+        slave_id_ = Identification();
         transport_->stop();
         request_manager_.stop_keepalive_management();
         request_manager_.stop();
@@ -112,7 +112,7 @@ int Master::handler_state_connecting()
         transport_->clear_error();
         transport_->start();
         request_manager_.start();
-        request_manager_.send_hip(host_id_, connecting_timeout_);
+        request_manager_.send_hip(master_id_, connecting_timeout_);
     }
 
     Packet p;
@@ -122,7 +122,7 @@ int Master::handler_state_connecting()
     log_trace(logger_, "{}", p);
     switch (p.type()) {
     case Packet::Type::dip:
-        set_device_id(p);
+        set_slave_id(p);
         dip_received_ = true;
         request_manager_.ack_dip();
         break;
@@ -217,21 +217,21 @@ void Master::wait_connection_request()
     cv_connection_.wait(lk, [this]{return (connection_requested_ || !is_running());});
 }
 
-void Master::set_device_id(const Packet& p)
+void Master::set_slave_id(const Packet& p)
 {
     for (auto& b: p.blocks()) {
         switch (b.type) {
         case Packet::id_name:
-            device_id_.name = b.data;
+            slave_id_.name = b.data;
             break;
         case Packet::id_serial_number:
-            device_id_.serial_number = b.data;
+            slave_id_.serial_number = b.data;
             break;
         case Packet::id_hw_version:
-            device_id_.hw_version = b.data;
+            slave_id_.hw_version = b.data;
             break;
         case Packet::id_sw_version:
-            device_id_.sw_version = b.data;
+            slave_id_.sw_version = b.data;
             break;
         default:
             log_warn(logger_,
@@ -239,7 +239,7 @@ void Master::set_device_id(const Packet& p)
                      b.type);
         }
     }
-    log_debug(logger_, "device {}", device_id_);
+    log_debug(logger_, "device {}", slave_id_);
 }
 
 void Master::keepalive_timed_out()
