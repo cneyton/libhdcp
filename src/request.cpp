@@ -197,6 +197,17 @@ void MasterRequestManager::clear()
     packet_id_        = 0;
 }
 
+void SlaveRequestManager::run()
+{
+    clear();
+    notify_running(0);
+    while (is_running()) {
+        timeout_queue_.run_once(now_++);
+        std::this_thread::sleep_for(time_base_ms);
+    }
+    clear();
+}
+
 void SlaveRequestManager::start()
 {
     if (is_running())
