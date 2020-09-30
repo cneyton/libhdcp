@@ -11,6 +11,8 @@
 #include "transport.h"
 
 namespace hdcp {
+namespace transport {
+namespace usb {
 
 class Transfer
 {
@@ -19,9 +21,7 @@ public:
     virtual ~Transfer();
 
     virtual void submit();
-    int  async_cancel();
     void cancel();
-    void wait_cancel();
     void notify_cancelled();
     libusb_transfer * libusb_transfer_ptr() const {return transfer_;};
 
@@ -61,13 +61,13 @@ private:
 };
 
 
-class UsbAsync: public common::Log, private common::Thread, public Transport
+class Device: public common::Log, private common::Thread, public Transport
 {
 public:
-    UsbAsync(common::Logger logger, int itfc_nb,
+    Device(common::Logger logger, int itfc_nb,
              uint16_t vendor_id, uint16_t product_id,
              uint8_t in_endpoint, uint8_t out_endpoint);
-    virtual ~UsbAsync();
+    virtual ~Device();
 
     void write(Packet&& p) override;
     void stop()    override;
@@ -114,4 +114,6 @@ private:
     common::Logger usb_logger_;
 };
 
+} /* namespace usb  */
+} /* namespace transport  */
 } /* namespace hdcp */

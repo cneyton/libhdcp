@@ -1,7 +1,9 @@
 #include "hdcp/exception.h"
 #include "usb_async.h"
 
-using namespace hdcp;
+namespace hdcp {
+namespace transport {
+namespace usb {
 
 constexpr int kernel_auto_detach_driver = 1;
 
@@ -24,28 +26,23 @@ void Transfer::submit()
         throw libusb_error(ret);
 }
 
-int Transfer::async_cancel()
-{
-    int ret = libusb_cancel_transfer(transfer_);
-    /*
-     * no error if the cancel occurred or if the transfer is not in progress,
-     * already complete, or already cancelled.
-     */
-    if (ret != 0 && ret != LIBUSB_ERROR_NOT_FOUND)
-        throw libusb_error(ret);
-    return ret;
-}
-
 void Transfer::cancel()
 {
-    if (async_cancel() != LIBUSB_ERROR_NOT_FOUND)
-        wait_cancel();
-}
-
-void Transfer::wait_cancel()
-{
-    std::unique_lock<std::mutex> lk(mutex_cancel_);
-    cv_cancel_.wait(lk, [this]{return cancelled_;});
+    cancelled_ = false;
+    int ret = libusb_cancel_transfer(transfer_);
+    switch (ret) {
+    case 0:
+    {
+        std::unique_lock<std::mutex> lk(mutex_cancel_);
+        cv_cancel_.wait(lk, [this]{return cancelled_;});
+        break;
+    }
+    case LIBUSB_ERROR_NOT_FOUND:
+        // the transfer is not in progress, already complete, or already cancelled.
+        return;
+    default:
+        throw libusb_error(ret);
+    }
 }
 
 void Transfer::notify_cancelled()
@@ -59,7 +56,7 @@ RTransfer::RTransfer(libusb_device_handle * device_handle): device_handle_(devic
 {
     if (!device_handle)
         throw transport_error("device handle nullptr",
-                              transport_error::Code::other);
+                              transport_error::Code::internal);
 
     if (!(buf_ = libusb_dev_mem_alloc(device_handle, Packet::max_size)))
         throw std::bad_alloc();
@@ -76,7 +73,7 @@ void WTransfer::submit()
     in_progress_ = true;
 }
 
-UsbAsync::UsbAsync(common::Logger logger, int itfc_nb,
+Device::Device(common::Logger logger, int itfc_nb,
                    uint16_t vendor_id, uint16_t product_id,
                    uint8_t in_endoint, uint8_t out_endpoint):
     common::Log(logger), itfc_nb_(itfc_nb), vendor_id_(vendor_id), product_id_(product_id),
@@ -88,22 +85,22 @@ UsbAsync::UsbAsync(common::Logger logger, int itfc_nb,
         throw hdcp::libusb_error(ret);
 
     spdlog::register_logger(usb_logger_);
-    libusb_set_log_cb(ctx_, &UsbAsync::log_cb, LIBUSB_LOG_CB_GLOBAL);
+    libusb_set_log_cb(ctx_, &Device::log_cb, LIBUSB_LOG_CB_GLOBAL);
     libusb_set_option(ctx_, LIBUSB_OPTION_LOG_LEVEL, LIBUSB_LOG_LEVEL_WARNING);
 }
 
-UsbAsync::~UsbAsync()
+Device::~Device()
 {
     stop();
     libusb_exit(ctx_);
 }
 
-bool UsbAsync::is_open()
+bool Device::is_open()
 {
     return open_;
 }
 
-void UsbAsync::open()
+void Device::open()
 {
     if (is_open())
         return;
@@ -130,7 +127,7 @@ void UsbAsync::open()
     log_debug(logger_, "transport opened");
 }
 
-void UsbAsync::close()
+void Device::close()
 {
     if (!is_open())
         return;
@@ -143,7 +140,7 @@ void UsbAsync::close()
     wtransfer_      = nullptr;
     rtransfer_curr_ = nullptr;
     rtransfer_prev_ = nullptr;
-    // close
+    // release interface & close
     int ret;
     if ((ret = libusb_release_interface(device_handle_, itfc_nb_)) < 0)
         throw hdcp::libusb_error(ret);
@@ -154,7 +151,7 @@ void UsbAsync::close()
     log_debug(logger_, "transport closed");
 }
 
-void UsbAsync::write(Packet&& p)
+void Device::write(Packet&& p)
 {
     if (!is_open())
         throw transport_error("can't write while transport is closed",
@@ -171,31 +168,31 @@ void UsbAsync::write(Packet&& p)
     }
 }
 
-void UsbAsync::fill_transfer(WTransfer * transfer)
+void Device::fill_transfer(WTransfer * transfer)
 {
     if (!transfer)
         throw transport_error("transfer null pointer",
-                              transport_error::Code::other);
+                              transport_error::Code::internal);
 
     libusb_fill_bulk_transfer(transfer->libusb_transfer_ptr(), device_handle_, out_endpoit_,
                               (uint8_t*)transfer->packet().data(), transfer->packet().size(),
-                              &UsbAsync::write_cb, this, timeout_write);
+                              &Device::write_cb, this, timeout_write);
 }
 
-void UsbAsync::fill_transfer(RTransfer * transfer)
+void Device::fill_transfer(RTransfer * transfer)
 {
     if (!transfer)
         throw transport_error("transfer null pointer",
-                              transport_error::Code::other);
+                              transport_error::Code::internal);
 
     libusb_fill_bulk_transfer(transfer->libusb_transfer_ptr(), device_handle_,
                               in_endoint_, transfer->get_buffer(), Packet::max_size,
-                              &UsbAsync::read_cb, this, timeout_read);
+                              &Device::read_cb, this, timeout_read);
 }
 
-void UsbAsync::write_cb(libusb_transfer * transfer) noexcept
+void Device::write_cb(libusb_transfer * transfer) noexcept
 {
-    UsbAsync * usb = (UsbAsync*)transfer->user_data;
+    Device * usb = (Device*)transfer->user_data;
 
     try {
         switch (transfer->status) {
@@ -231,9 +228,9 @@ void UsbAsync::write_cb(libusb_transfer * transfer) noexcept
     }
 }
 
-void UsbAsync::read_cb(libusb_transfer * transfer) noexcept
+void Device::read_cb(libusb_transfer * transfer) noexcept
 {
-    UsbAsync * usb = (UsbAsync*)transfer->user_data;
+    Device * usb = (Device*)transfer->user_data;
 
     try {
         switch (transfer->status) {
@@ -284,7 +281,7 @@ void UsbAsync::read_cb(libusb_transfer * transfer) noexcept
     }
 }
 
-void UsbAsync::run()
+void Device::run()
 {
     try {
         rtransfer_curr_->submit();
@@ -297,7 +294,7 @@ void UsbAsync::run()
     }
 }
 
-void UsbAsync::stop()
+void Device::stop()
 {
     if (!is_running())
         return;
@@ -310,17 +307,18 @@ void UsbAsync::stop()
     log_debug(logger_, "transport stopped");
 }
 
-void UsbAsync::start()
+void Device::start()
 {
     if (is_running())
         return;
     log_debug(logger_, "starting transport...");
+    clear_queues();
     open();
     common::Thread::start(true);
     log_debug(logger_, "transport started");
 }
 
-void UsbAsync::cancel_transfers()
+void Device::cancel_transfers()
 {
     log_debug(logger_, "cancelling transfers...");
     if (wtransfer_)      wtransfer_->cancel();
@@ -329,7 +327,7 @@ void UsbAsync::cancel_transfers()
     log_debug(logger_, "transfers cancelled");
 }
 
-void UsbAsync::log_cb(libusb_context*, libusb_log_level lvl, const char* str) noexcept
+void Device::log_cb(libusb_context*, libusb_log_level lvl, const char* str) noexcept
 {
     auto logger = spdlog::get("usb_logger");
     if (!logger)
@@ -354,3 +352,7 @@ void UsbAsync::log_cb(libusb_context*, libusb_log_level lvl, const char* str) no
         break;
     }
 }
+
+} /* namespace usb  */
+} /* namespace transport  */
+} /* namespace hdcp */

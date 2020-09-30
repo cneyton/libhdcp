@@ -15,6 +15,7 @@ public:
         write_queue_full,
         read_queue_full,
         not_permitted,
+        internal,
         other,
     };
 
