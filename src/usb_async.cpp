@@ -228,6 +228,7 @@ void Device::write_cb(libusb_transfer * transfer) noexcept
         }
     } catch (std::exception& e) {
         log_error(usb->get_logger(), e.what());
+        usb->call_error_cb(std::current_exception());
     }
 }
 
@@ -258,29 +259,26 @@ void Device::read_cb(libusb_transfer * transfer) noexcept
                 log_debug(usb->get_logger(), "read transfer cancelled");
                 usb->rtransfer_curr_->notify_cancelled();
                 break;
-            case LIBUSB_TRANSFER_NO_DEVICE:
-                throw libusb_error(transfer->status);
-            case LIBUSB_TRANSFER_STALL:
-            case LIBUSB_TRANSFER_OVERFLOW:
             case LIBUSB_TRANSFER_TIMED_OUT:
-            case LIBUSB_TRANSFER_ERROR:
             {
-                // resbmit transfer, if the problem persists the application will close
+                // resbmit transfer, if the problem persists the application will timeout
                 RTransfer * tmp = usb->rtransfer_curr_;
                 usb->rtransfer_curr_ = usb->rtransfer_prev_;
                 usb->rtransfer_curr_->submit();
                 usb->rtransfer_prev_ = tmp;
                 break;
             }
+            case LIBUSB_TRANSFER_NO_DEVICE:
+            case LIBUSB_TRANSFER_STALL:
+            case LIBUSB_TRANSFER_OVERFLOW:
+            case LIBUSB_TRANSFER_ERROR:
+                throw libusb_error(transfer->status);
             default:
                 log_error(usb->get_logger(), "unknown transfer status, you should not be here");
         }
-    } catch (libusb_error& e) {
-        log_error(usb->get_logger(), e.what());
-        // nothing to do, the application will close after timeout
     } catch (std::exception& e) {
-        // packet error & transport error will result in the data being discarded
         log_error(usb->get_logger(), e.what());
+        usb->call_error_cb(std::current_exception());
     }
 }
 
@@ -294,6 +292,7 @@ void Device::run()
         }
     } catch (std::exception& e) {
         log_error(logger_, e.what());
+        call_error_cb(std::current_exception());
     }
 }
 
@@ -354,6 +353,12 @@ void Device::log_cb(libusb_context*, libusb_log_level lvl, const char* str) noex
     default:
         break;
     }
+}
+
+void Device::call_error_cb(std::exception_ptr eptr) const
+{
+    if (error_cb_)
+        error_cb_(eptr);
 }
 
 } /* namespace usb  */

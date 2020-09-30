@@ -10,7 +10,6 @@
 #include "packet.h"
 
 namespace hdcp {
-namespace transport {
 
 constexpr std::chrono::milliseconds time_base_ms(100);
 constexpr uint64_t timeout_read  = 0; // no timeout when reading
@@ -19,10 +18,13 @@ constexpr uint64_t timeout_write = time_base_ms.count();
 class Transport
 {
 public:
+    using ErrorCallback = std::function<void(std::exception_ptr)>;
+
     Transport(): write_queue_(max_queue_size), read_queue_(max_queue_size) {};
     virtual ~Transport() = default;
 
-    virtual void write(const Packet& p) {write(Packet(p));};
+    void set_error_cb(ErrorCallback&& cb) {error_cb_ = std::forward<ErrorCallback>(cb);}
+    void write(const Packet& p) {write(Packet(p));}
     bool read(Packet& p)
     {
         return read_queue_.wait_dequeue_timed(p, time_base_ms);
@@ -36,6 +38,9 @@ public:
     virtual void close()   = 0;
 
 protected:
+    ErrorCallback error_cb_;
+    std::exception_ptr eptr_;
+
     common::ConcurrentQueue<Packet>           write_queue_;
     common::BlockingReaderWriterQueue<Packet> read_queue_;
 
@@ -57,5 +62,4 @@ private:
     Transport& operator=(Transport&&)      = delete;
 };
 
-} /* namespace transport */
 } /* namespace hdcp */

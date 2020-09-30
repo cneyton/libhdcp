@@ -76,6 +76,8 @@ public:
     void open()    override;
     void close()   override;
 
+    void call_error_cb(std::exception_ptr) const;
+
 private:
     using common::Thread::start;
 
