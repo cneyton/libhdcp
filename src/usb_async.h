@@ -88,6 +88,7 @@ private:
     std::mutex  mutex_wprogress_;
 
     bool open_ = false;
+    std::mutex mutex_open_;
 
     int      itfc_nb_;
     uint16_t vendor_id_, product_id_;

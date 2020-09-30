@@ -97,6 +97,7 @@ Device::~Device()
 
 bool Device::is_open()
 {
+    std::lock_guard<std::mutex> lk(mutex_open_);
     return open_;
 }
 
@@ -106,6 +107,7 @@ void Device::open()
         return;
 
     log_debug(logger_, "opening transport...");
+    std::lock_guard<std::mutex> lk(mutex_open_);
 
     if (!(device_handle_ = libusb_open_device_with_vid_pid(ctx_, vendor_id_, product_id_)))
         throw libusb_error(LIBUSB_ERROR_NO_DEVICE);
@@ -133,6 +135,7 @@ void Device::close()
         return;
 
     log_debug(logger_, "closing transport...");
+    std::lock_guard<std::mutex> lk(mutex_open_);
     // delete transfers
     delete wtransfer_;
     delete rtransfer_curr_;
