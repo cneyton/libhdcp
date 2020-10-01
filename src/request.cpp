@@ -15,7 +15,11 @@ void RequestManager::start()
 {
     if (is_running())
         return;
+    log_debug(logger_, "starting request manager...");
+    clear();
+    log_debug(logger_, "cleared");
     common::Thread::start(true);
+    log_debug(logger_, "request manager started");
 }
 
 void RequestManager::stop()
@@ -35,7 +39,6 @@ void RequestManager::send_command(Packet::BlockType type, const std::string& dat
         timeout_queue_.add_repeating(now_, timeout.count()/time_base_ms.count(),
                                      std::bind(&RequestManager::cmd_timeout_cb, this,
                                                std::placeholders::_1, std::placeholders::_2));
-
 
     // reset keepalive mngt
     timeout_queue_.erase(keepalive_mngt_id_);
@@ -155,12 +158,14 @@ void RequestManager::cmd_timeout_cb(common::TimeoutQueue::Id id, int64_t)
 
 void RequestManager::ka_timeout_cb(common::TimeoutQueue::Id, int64_t)
 {
+    log_error(logger_, "ka timeout");
     if (timeout_cb_)
         timeout_cb_(TimeoutType::ka_timeout);
 }
 
 void RequestManager::dip_timeout_cb(common::TimeoutQueue::Id, int64_t)
 {
+    log_error(logger_, "dip timeout");
     if (timeout_cb_)
         timeout_cb_(TimeoutType::dip_timeout);
 }
@@ -178,13 +183,11 @@ void RequestManager::ka_mngt_timeout_cb(common::TimeoutQueue::Id, int64_t)
 
 void RequestManager::run()
 {
-    clear();
     notify_running(0);
     while (is_running()) {
         timeout_queue_.run_once(now_++);
         std::this_thread::sleep_for(time_base_ms);
     }
-    clear();
 }
 
 void RequestManager::clear()
@@ -204,20 +207,22 @@ namespace slave {
 
 void RequestManager::run()
 {
-    clear();
     notify_running(0);
     while (is_running()) {
         timeout_queue_.run_once(now_++);
         std::this_thread::sleep_for(time_base_ms);
     }
-    clear();
 }
 
 void RequestManager::start()
 {
     if (is_running())
         return;
+
+    log_debug(logger_, "starting request manager...");
+    clear();
     common::Thread::start(true);
+    log_debug(logger_, "request manager started");
 }
 
 void RequestManager::stop()
@@ -283,6 +288,7 @@ void RequestManager::clear()
 
 void RequestManager::ka_timeout_cb(common::TimeoutQueue::Id, int64_t)
 {
+    log_error(logger_, "ka timeout");
     if (timeout_cb_)
         timeout_cb_();
 }
