@@ -71,7 +71,6 @@ int Slave::handler_state_disconnected()
         disconnection_requested_ = false;
         request_manager_.stop_keepalive_management();
         request_manager_.stop();
-        transport_->clear_queues();
         transport_->start();
     }
 

@@ -1,7 +1,8 @@
 #include "master.h"
 #include "hdcp/exception.h"
 
-using namespace hdcp;
+namespace hdcp {
+namespace application {
 
 Master::Master(common::Logger logger, const Identification& master_id,
                std::unique_ptr<Transport> transport):
@@ -58,15 +59,15 @@ const Identification& Master::connect()
         return slave_id_;
 
     {
-        // wake-up in case we were waiting to connect
+        // wake-up if we were waiting to connect
         std::unique_lock<std::mutex> lk(mutex_connection_);
         disconnection_requested_ = false;
         connection_requested_ = true;
         cv_connection_.notify_all();
     }
     std::unique_lock<std::mutex> lk(mutex_connecting_);
-    connecting_ = true;
-    cv_connecting_.wait(lk, [this]{return !connecting_;});
+    cv_connecting_.wait(lk, [this]{return !connection_requested_ &&
+                                          statemachine_.get_state() != State::connecting;});
     if (statemachine_.get_state() != State::connected)
         throw application_error("connection failed");
     return slave_id_;
@@ -77,20 +78,15 @@ void Master::disconnect()
     if (get_state() == State::disconnected)
         return;
     std::unique_lock<std::mutex> lk(mutex_disconnection_);
-    async_disconnect();
-    cv_disconnection_.wait(lk, [this]{return !disconnection_requested_;});
-}
-
-inline
-void Master::async_disconnect()
-{
-    if (get_state() == State::disconnected)
-        return;
     disconnection_requested_ = true;
+    cv_disconnection_.wait(lk, [this]{return !disconnection_requested_;});
 }
 
 int Master::handler_state_init()
 {
+    connection_requested_    = false;
+    dip_received_            = false;
+    disconnection_requested_ = false;
     notify_running(0);
     return 0;
 }
@@ -102,12 +98,15 @@ int Master::handler_state_disconnected()
         request_manager_.stop_keepalive_management();
         request_manager_.stop();
         transport_->stop();
-        std::unique_lock<std::mutex> lk(mutex_disconnection_);
-        disconnection_requested_ = false;
-        if (connecting_) {
+        {
+            // notify disconnected
+            std::unique_lock<std::mutex> lk(mutex_disconnection_);
+            disconnection_requested_ = false;
+            cv_disconnection_.notify_all();
+        }
+        {
             // notify connection attempt failed
             std::unique_lock<std::mutex> lk(mutex_connecting_);
-            connecting_ = false;
             cv_connecting_.notify_all();
         }
     }
@@ -121,8 +120,6 @@ int Master::handler_state_connecting()
 {
     if (statemachine_.get_nb_loop_in_current_state() == 1) {
         connection_requested_ = false;
-        transport_->clear_queues();
-        transport_->clear_error();
         transport_->start();
         request_manager_.start();
         request_manager_.send_hip(master_id_, connecting_timeout_);
@@ -153,7 +150,6 @@ int Master::handler_state_connected()
         dip_received_ = false;
         request_manager_.start_keepalive_management(keepalive_interval, keepalive_timeout);
         std::unique_lock<std::mutex> lk(mutex_connecting_);
-        connecting_ = false;
         cv_connecting_.notify_all();
     }
 
@@ -270,3 +266,6 @@ void Master::dip_timed_out()
         error_cb_(0);
     disconnection_requested_ = true;
 }
+
+} /* namespace application  */
+} /* namespace hdcp */

@@ -9,6 +9,7 @@
 #include "application.h"
 
 namespace hdcp {
+namespace application {
 
 class Master: public common::Log, private common::Thread
 {
@@ -42,8 +43,6 @@ public:
     const Identification& connect();
     /// Synchronous disconnect
     void disconnect();
-    /// Asynchronous disconnect
-    void async_disconnect();
     void send_command(Packet::BlockType id, const std::string& data, Request::Callback cb);
 
 private:
@@ -91,7 +90,6 @@ private:
     std::condition_variable cv_connection_;
     std::mutex              mutex_connecting_;
     std::condition_variable cv_connecting_;
-    bool                    connecting_ = false;
 
     common::Statemachine<State>   statemachine_;
     std::unique_ptr<Transport>    transport_;
@@ -108,4 +106,5 @@ private:
     void dip_timed_out();
 };
 
+} /* namespace application  */
 } /* namespace hdcp */
