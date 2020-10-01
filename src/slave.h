@@ -9,6 +9,7 @@
 #include "application.h"
 
 namespace hdcp {
+namespace appli {
 
 class Slave: public common::Log, private common::Thread
 {
@@ -23,7 +24,7 @@ public:
     };
 
     Slave(common::Logger logger, const Identification& id, std::unique_ptr<Transport> transport);
-    virtual ~Slave();
+    ~Slave();
 
     State get_state() const {return statemachine_.get_state();};
     const Identification& get_master_id() const {return master_id_;}
@@ -38,7 +39,6 @@ public:
     void send_cmd_ack(const Packet& packet);
 
 private:
-    friend SlaveRequestManager;
     using common::Thread::start;
 
     int handler_state_init();
@@ -82,7 +82,7 @@ private:
 
     common::Statemachine<State>   statemachine_;
     std::unique_ptr<Transport>    transport_;
-    SlaveRequestManager           request_manager_;
+    slave::RequestManager         request_manager_;
     Identification                id_;
     Identification                master_id_;
     CmdCallback                   cmd_cb_;
@@ -90,7 +90,8 @@ private:
 
     void run() override;
     void set_master_id(const Packet& p);
-    void keepalive_timed_out();
+    void timeout_cb();
 };
 
+} /* namespace appli  */
 } /* namespace hdcp */

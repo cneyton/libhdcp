@@ -9,13 +9,13 @@
 #include "application.h"
 
 namespace hdcp {
-namespace application {
+namespace appli {
 
 class Master: public common::Log, private common::Thread
 {
 public:
     using DataCallback  = std::function<void(const Packet&)>;
-    using ErrorCallback = std::function<void(int ec)>;
+    using ErrorCallback = std::function<void(int)>;
     enum class State {
         init,
         disconnected,
@@ -23,13 +23,8 @@ public:
         connected
     };
 
-    enum class Error {
-        dip_timeout,
-        ka_timeout,
-    };
-
     Master(common::Logger logger, const Identification& id, std::unique_ptr<Transport> transport);
-    virtual ~Master();
+    ~Master();
 
     State get_state() const {return statemachine_.get_state();};
     const Identification& get_slave_id()  const {return slave_id_;}
@@ -43,10 +38,10 @@ public:
     const Identification& connect();
     /// Synchronous disconnect
     void disconnect();
+    /// Send command asynchronously
     void send_command(Packet::BlockType id, const std::string& data, Request::Callback cb);
 
 private:
-    friend MasterRequestManager;
     using common::Thread::start;
 
     int handler_state_init();
@@ -93,7 +88,7 @@ private:
 
     common::Statemachine<State>   statemachine_;
     std::unique_ptr<Transport>    transport_;
-    MasterRequestManager          request_manager_;
+    master::RequestManager        request_manager_;
     Identification                master_id_;
     Identification                slave_id_;
     DataCallback                  data_cb_;
@@ -102,9 +97,8 @@ private:
     void run() override;
     void wait_connection_request();
     void set_slave_id(const Packet& p);
-    void keepalive_timed_out();
-    void dip_timed_out();
+    void timeout_cb(master::RequestManager::TimeoutType);
 };
 
-} /* namespace application  */
+} /* namespace appli  */
 } /* namespace hdcp */

@@ -2,12 +2,14 @@
 #include "hdcp/exception.h"
 
 namespace hdcp {
-namespace application {
+namespace appli {
 
 Master::Master(common::Logger logger, const Identification& master_id,
                std::unique_ptr<Transport> transport):
     common::Log(logger), statemachine_(logger, "com_master", states_, State::init),
-    transport_(std::move(transport)), request_manager_(logger, transport_.get(), this),
+    transport_(std::move(transport)),
+    request_manager_(logger, transport_.get(),
+                     std::bind(&Master::timeout_cb, this, std::placeholders::_1)),
     master_id_(master_id)
 {
     statemachine_.display_trace();
@@ -251,7 +253,7 @@ void Master::set_slave_id(const Packet& p)
     log_debug(logger_, "device {}", slave_id_);
 }
 
-void Master::keepalive_timed_out()
+void Master::timeout_cb(master::RequestManager::TimeoutType)
 {
     log_error(logger_, "keepalive timeout");
     if (error_cb_)
@@ -259,13 +261,5 @@ void Master::keepalive_timed_out()
     disconnection_requested_ = true;
 }
 
-void Master::dip_timed_out()
-{
-    log_error(logger_, "dip timeout");
-    if (error_cb_)
-        error_cb_(0);
-    disconnection_requested_ = true;
-}
-
-} /* namespace application  */
+} /* namespace appli */
 } /* namespace hdcp */

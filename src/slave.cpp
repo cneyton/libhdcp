@@ -1,12 +1,14 @@
 #include "slave.h"
 #include "hdcp/exception.h"
 
-using namespace hdcp;
+namespace hdcp {
+namespace appli {
 
 Slave::Slave(common::Logger logger, const Identification& id,
              std::unique_ptr<Transport> transport):
     common::Log(logger), statemachine_(logger, "com_slave", states_, State::init),
-    transport_(std::move(transport)), request_manager_(logger, transport_.get(), this),
+    transport_(std::move(transport)),
+    request_manager_(logger, transport_.get(), std::bind(&Slave::timeout_cb, this)),
     id_(id)
 {
     statemachine_.display_trace();
@@ -216,10 +218,13 @@ void Slave::set_master_id(const Packet& p)
     log_debug(logger_, "master {}", master_id_);
 }
 
-void Slave::keepalive_timed_out()
+void Slave::timeout_cb()
 {
     log_error(logger_, "keepalive timeout");
     if (error_cb_)
         error_cb_(0);
     disconnection_requested_ = true;
 }
+
+} /* namespace appli  */
+} /* namespace hdcp */

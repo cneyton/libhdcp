@@ -56,12 +56,20 @@ private:
     uint                      retry_  = 0;
 };
 
-class Master;
-class MasterRequestManager: public common::Log, public common::Thread
+namespace appli {
+namespace master {
+
+class RequestManager: public common::Log, public common::Thread
 {
 public:
-    MasterRequestManager(common::Log logger, Transport * transport, Master * master):
-        Log(logger), transport_(transport), master_(master) {}
+    enum class TimeoutType {
+        dip_timeout,
+        ka_timeout
+    };
+    using TimeoutCallback = std::function<void(TimeoutType)>;
+
+    RequestManager(common::Log logger, Transport * transport, TimeoutCallback cb):
+        Log(logger), transport_(transport), timeout_cb_(cb) {}
 
     void send_command(Packet::BlockType type, const std::string& data,
                       Request::Callback request_cb, std::chrono::milliseconds timeout);
@@ -94,11 +102,6 @@ private:
             boost::multi_index::const_mem_fun<Request, Packet::Id, &Request::get_command_id>>>>
             Set;
 
-    int64_t                 now_ = 0;
-    std::atomic<Packet::Id> packet_id_ = 0;
-
-    int64_t timeout_keepalive_;
-
     Set requests_;
     std::mutex requests_mutex_;
 
@@ -107,8 +110,14 @@ private:
     common::TimeoutQueue::Id keepalive_mngt_id_;
     common::TimeoutQueue::Id dip_id_;
 
+    int64_t                 now_ = 0;
+    std::atomic<Packet::Id> packet_id_ = 0;
+
+    int64_t timeout_keepalive_;
+
     Transport * transport_;
-    Master    * master_;
+
+    TimeoutCallback timeout_cb_;
 
     /*
      * This cb resend a keep-alive every timeout_keepalive
@@ -123,12 +132,17 @@ private:
     void clear();
 };
 
-class Slave;
-class SlaveRequestManager: public common::Log, public common::Thread
+} /* namespace  master */
+
+namespace slave {
+
+class RequestManager: public common::Log, public common::Thread
 {
 public:
-    SlaveRequestManager(common::Log logger, Transport * transport, Slave * slave):
-        Log(logger), transport_(transport), slave_(slave) {}
+    using TimeoutCallback = std::function<void()>;
+
+    RequestManager(common::Log logger, Transport * transport, TimeoutCallback cb):
+        Log(logger), transport_(transport), timeout_cb_(cb) {}
 
     void send_cmd_ack(const Packet& packet);
     void send_data(std::vector<Packet::Block>& blocks);
@@ -143,16 +157,17 @@ public:
 private:
     using common::Thread::start;
 
+    common::TimeoutQueue     timeout_queue_;
+    common::TimeoutQueue::Id keepalive_id_;
+
     int64_t                 now_ = 0;
     std::atomic<Packet::Id> packet_id_ = 0;
 
     int64_t timeout_keepalive_;
 
-    common::TimeoutQueue     timeout_queue_;
-    common::TimeoutQueue::Id keepalive_id_;
-
     Transport * transport_;
-    Slave     * slave_;
+
+    TimeoutCallback timeout_cb_;
 
     void ka_timeout_cb(common::TimeoutQueue::Id id, int64_t now);
 
@@ -160,4 +175,6 @@ private:
     void clear();
 };
 
+} /* namespace slave */
+} /* namespace appli */
 } /* namespace hdcp */
