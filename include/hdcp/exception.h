@@ -8,7 +8,13 @@
 
 namespace hdcp {
 
-class transport_error: public std::runtime_error
+class hdcp_error: public std::runtime_error
+{
+public:
+    hdcp_error(const std::string& what_arg): std::runtime_error(what_arg) {}
+};
+
+class transport_error: public hdcp_error
 {
 public:
     enum Code {
@@ -19,8 +25,7 @@ public:
         other,
     };
 
-    transport_error(const std::string& what_arg, int code):
-        std::runtime_error(what_arg), code_(code) {}
+    transport_error(const std::string& what_arg, int code): hdcp_error(what_arg), code_(code) {}
     int code() const {return code_;}
 
 private:
@@ -40,16 +45,16 @@ public:
         transport_error(fmt::format("{} ({})", ec.message(), ec.value()), ec.value()) {}
 };
 
-class application_error: public std::runtime_error
+class application_error: public hdcp_error
 {
 public:
-    application_error(const std::string& what_arg): std::runtime_error(what_arg) {}
+    application_error(const std::string& what_arg): hdcp_error(what_arg) {}
 };
 
-class packet_error: public std::runtime_error
+class packet_error: public hdcp_error
 {
 public:
-    packet_error(const std::string& what_arg): std::runtime_error(what_arg) {}
+    packet_error(const std::string& what_arg): hdcp_error(what_arg) {}
 };
 
 } /* namespace hdcp */
