@@ -232,16 +232,16 @@ void Master::set_slave_id(const Packet& p)
 {
     for (auto& b: p.blocks()) {
         switch (b.type) {
-        case Packet::id_name:
+        case Packet::ReservedBlockType::name:
             slave_id_.name = b.data;
             break;
-        case Packet::id_serial_number:
+        case Packet::ReservedBlockType::serial_number:
             slave_id_.serial_number = b.data;
             break;
-        case Packet::id_hw_version:
+        case Packet::ReservedBlockType::hw_version:
             slave_id_.hw_version = b.data;
             break;
-        case Packet::id_sw_version:
+        case Packet::ReservedBlockType::sw_version:
             slave_id_.sw_version = b.data;
             break;
         default:

@@ -18,11 +18,12 @@ public:
 
     static const size_t max_size = 2048;
 
-    // reserved block types
-    static const BlockType id_name          = 0x0001;
-    static const BlockType id_serial_number = 0x0002;
-    static const BlockType id_hw_version    = 0x0003;
-    static const BlockType id_sw_version    = 0x0004;
+    enum ReservedBlockType: BlockType {
+        name          = 0x0001,
+        serial_number = 0x0002,
+        hw_version    = 0x0003,
+        sw_version    = 0x0004
+    };
 
     struct Block
     {

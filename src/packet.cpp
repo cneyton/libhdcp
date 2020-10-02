@@ -66,10 +66,10 @@ Packet Packet::make_keepalive_ack(Id id)
 Packet Packet::make_hip(Id id, const hdcp::Identification& host_id)
 {
     std::string payload;
-    payload += Packet::make_block(id_name, host_id.name);
-    payload += Packet::make_block(id_serial_number, host_id.serial_number);
-    payload += Packet::make_block(id_hw_version, host_id.hw_version);
-    payload += Packet::make_block(id_sw_version, host_id.sw_version);
+    payload += Packet::make_block(ReservedBlockType::name, host_id.name);
+    payload += Packet::make_block(ReservedBlockType::serial_number, host_id.serial_number);
+    payload += Packet::make_block(ReservedBlockType::hw_version, host_id.hw_version);
+    payload += Packet::make_block(ReservedBlockType::sw_version, host_id.sw_version);
     std::string header(Packet::make_header(id, Packet::Type::hip, 4, payload));
     return Packet(header + payload);
 }
@@ -77,10 +77,10 @@ Packet Packet::make_hip(Id id, const hdcp::Identification& host_id)
 Packet Packet::make_dip(Id id, const hdcp::Identification& dev_id)
 {
     std::string payload;
-    payload += Packet::make_block(id_name, dev_id.name);
-    payload += Packet::make_block(id_serial_number, dev_id.serial_number);
-    payload += Packet::make_block(id_hw_version, dev_id.hw_version);
-    payload += Packet::make_block(id_sw_version, dev_id.sw_version);
+    payload += Packet::make_block(ReservedBlockType::name, dev_id.name);
+    payload += Packet::make_block(ReservedBlockType::serial_number, dev_id.serial_number);
+    payload += Packet::make_block(ReservedBlockType::hw_version, dev_id.hw_version);
+    payload += Packet::make_block(ReservedBlockType::sw_version, dev_id.sw_version);
     std::string header(Packet::make_header(id, Packet::Type::dip, 4, payload));
     return Packet(header + payload);
 }
