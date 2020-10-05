@@ -1,19 +1,21 @@
 #include "tcp_client.h"
 
-using namespace hdcp;
+namespace hdcp {
+namespace transport {
+namespace tcp {
 
-TcpClient::TcpClient(common::Logger logger, std::string_view host, std::string_view service):
+Client::Client(common::Logger logger, std::string_view host, std::string_view service):
     Log(logger),
     io_context_(), socket_(io_context_), host_(host), service_(service)
 {
 }
 
-TcpClient::~TcpClient()
+Client::~Client()
 {
     stop();
 }
 
-void TcpClient::write(Packet&& p)
+void Client::write(Packet&& p)
 {
     if (!is_open())
         throw transport_error("can't write while transport is closed",
@@ -30,7 +32,7 @@ void TcpClient::write(Packet&& p)
         });
 }
 
-void TcpClient::stop()
+void Client::stop()
 {
     if (!is_running())
         return;
@@ -42,7 +44,7 @@ void TcpClient::stop()
     log_debug(logger_, "transport stopped");
 }
 
-void TcpClient::start()
+void Client::start()
 {
     if (is_running())
         return;
@@ -52,7 +54,7 @@ void TcpClient::start()
     log_debug(logger_, "transport started");
 };
 
-void TcpClient::open()
+void Client::open()
 {
     if (is_open())
         return;
@@ -71,7 +73,7 @@ void TcpClient::open()
        });
 }
 
-void TcpClient::close()
+void Client::close()
 {
     if (!is_open())
         return;
@@ -84,12 +86,12 @@ void TcpClient::close()
         });
 }
 
-bool TcpClient::is_open()
+bool Client::is_open()
 {
     return socket_.is_open();
 }
 
-void TcpClient::run()
+void Client::run()
 {
     while (is_running()) {
         try {
@@ -102,7 +104,7 @@ void TcpClient::run()
     }
 }
 
-void TcpClient::read_header()
+void Client::read_header()
 {
     auto h = read_packet_.header_view();
     boost::asio::async_read(socket_,
@@ -118,7 +120,7 @@ void TcpClient::read_header()
         });
 }
 
-void TcpClient::read_payload()
+void Client::read_payload()
 {
     try {
         read_packet_.parse_header();
@@ -148,7 +150,7 @@ void TcpClient::read_payload()
         });
 }
 
-void TcpClient::do_write()
+void Client::do_write()
 {
     if (!write_queue_.try_dequeue(write_packet_))
         return;
@@ -167,3 +169,7 @@ void TcpClient::do_write()
             }
         });
 }
+
+} /* namespace tcp  */
+} /* namespace transport  */
+} /* namespace hdcp */

@@ -6,12 +6,14 @@
 #include "hdcp/exception.h"
 
 namespace hdcp {
+namespace transport {
+namespace tcp {
 
-class TcpClient: public common::Log, private common::Thread, public Transport
+class Client: public common::Log, private common::Thread, public Transport
 {
 public:
-    TcpClient(common::Logger logger, std::string_view host, std::string_view service);
-    virtual ~TcpClient();
+    Client(common::Logger logger, std::string_view host, std::string_view service);
+    ~Client();
 
     void write(Packet&& p) override;
     void stop()    override;
@@ -39,4 +41,6 @@ private:
     void run() override;
 };
 
+} /* namespace tcp  */
+} /* namespace transport  */
 } /* namespace hdcp */

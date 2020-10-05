@@ -1,8 +1,10 @@
 #include "tcp_server.h"
 
-using namespace hdcp;
+namespace hdcp {
+namespace transport {
+namespace tcp {
 
-TcpServer::TcpServer(common::Logger logger, uint16_t port):
+Server::Server(common::Logger logger, uint16_t port):
     common::Log(logger),
     io_context_(), socket_(io_context_),
     acceptor_(io_context_, boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v4(), port))
@@ -10,12 +12,12 @@ TcpServer::TcpServer(common::Logger logger, uint16_t port):
     acceptor_.set_option(boost::asio::ip::tcp::acceptor::reuse_address(true));
 }
 
-TcpServer::~TcpServer()
+Server::~Server()
 {
     stop();
 }
 
-void TcpServer::stop()
+void Server::stop()
 {
     if (!is_running())
         return;
@@ -27,7 +29,7 @@ void TcpServer::stop()
     log_debug(logger_, "transport stopped");
 }
 
-void TcpServer::start()
+void Server::start()
 {
     if (is_running())
         return;
@@ -37,7 +39,7 @@ void TcpServer::start()
     log_debug(logger_, "transport started");
 }
 
-void TcpServer::open()
+void Server::open()
 {
     if (is_open())
         return;
@@ -54,7 +56,7 @@ void TcpServer::open()
         });
 }
 
-void TcpServer::close()
+void Server::close()
 {
     if (!is_open())
         return;
@@ -67,12 +69,12 @@ void TcpServer::close()
         });
 }
 
-bool TcpServer::is_open()
+bool Server::is_open()
 {
     return socket_.is_open();
 }
 
-void TcpServer::write(Packet&& p)
+void Server::write(Packet&& p)
 {
     if (!is_open())
         throw transport_error("can't write while transport is closed",
@@ -89,7 +91,7 @@ void TcpServer::write(Packet&& p)
         });
 }
 
-void TcpServer::run()
+void Server::run()
 {
     while (is_running()) {
         try {
@@ -102,7 +104,7 @@ void TcpServer::run()
     }
 }
 
-void TcpServer::read_header()
+void Server::read_header()
 {
     auto h = read_packet_.header_view();
     boost::asio::async_read(socket_,
@@ -118,7 +120,7 @@ void TcpServer::read_header()
         });
 }
 
-void TcpServer::read_payload()
+void Server::read_payload()
 {
     try {
         read_packet_.parse_header();
@@ -148,7 +150,7 @@ void TcpServer::read_payload()
         });
 }
 
-void TcpServer::do_write()
+void Server::do_write()
 {
     if (!write_queue_.try_dequeue(write_packet_))
         return;
@@ -167,3 +169,7 @@ void TcpServer::do_write()
             }
         });
 }
+
+} /* namespace tcp  */
+} /* namespace transport  */
+} /* namespace hdcp */

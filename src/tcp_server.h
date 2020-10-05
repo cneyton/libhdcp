@@ -8,12 +8,14 @@
 #include "hdcp/exception.h"
 
 namespace hdcp {
+namespace transport {
+namespace tcp {
 
-class TcpServer: public common::Log, private common::Thread, public Transport
+class Server: public common::Log, private common::Thread, public Transport
 {
 public:
-    TcpServer(common::Logger logger, uint16_t port);
-    virtual ~TcpServer();
+    Server(common::Logger logger, uint16_t port);
+    ~Server();
 
     void write(Packet&& p) override;
     void stop()    override;
@@ -40,4 +42,6 @@ private:
     void run() override;
 };
 
+} /* namespace tcp  */
+} /* namespace transport  */
 } /* namespace hdcp */
