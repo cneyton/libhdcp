@@ -15,7 +15,7 @@ int main()
     common::Logger logger(spdlog::stdout_color_mt("hdcp"));
     logger->set_level(spdlog::level::trace);
 
-    UsbAsync t(logger, ITFC_NB, VENDOR_ID, PRODUCT_ID, IN, OUT);
+    transport::usb::Device t(logger, ITFC_NB, VENDOR_ID, PRODUCT_ID, IN, OUT);
     try {
         t.start();
     } catch (std::exception& e) {

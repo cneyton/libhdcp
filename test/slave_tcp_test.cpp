@@ -20,7 +20,7 @@ int main(int argc, char* argv[])
 
     Identification id {"server", "0001", "0.0.01", "0.1.02"};
     uint16_t port = std::stoi(argv[1]);
-    Slave slave(logger, id, std::make_unique<TcpServer>(logger, port));
+    appli::Slave slave(logger, id, std::make_unique<transport::tcp::Server>(logger, port));
     slave.set_cmd_cb(cmd_cb);
 
     slave.start();

@@ -20,8 +20,8 @@ int main(int argc, char* argv[])
     logger->set_level(spdlog::level::debug);
 
     Identification id {"client", "0001", "0.0.01", "0.1.02"};
-    Master master(logger, id,
-                  std::make_unique<TcpClient>(logger, argv[1], argv[2]));
+    appli::Master master(logger, id,
+                  std::make_unique<transport::tcp::Client>(logger, argv[1], argv[2]));
     master.set_data_cb(data_cb);
 
     master.start();
