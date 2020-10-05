@@ -13,6 +13,7 @@ Master::Master(common::Logger logger, const Identification& master_id,
     master_id_(master_id)
 {
     statemachine_.display_trace();
+    transport_->set_error_cb(std::bind(&Master::transport_error_cb, this, std::placeholders::_1));
 }
 
 Master::~Master()
@@ -210,11 +211,6 @@ void Master::run()
     while (is_running()) {
         try {
             statemachine_.wakeup();
-        } catch (transport_error& e) {
-            log_error(logger_, e.what());
-            if (error_cb_)
-                error_cb_(0);
-            disconnection_requested_ = true;
         } catch (std::exception& e) {
             log_error(logger_, e.what());
             disconnection_requested_ = true;
@@ -255,10 +251,16 @@ void Master::set_slave_id(const Packet& p)
 
 void Master::timeout_cb(master::RequestManager::TimeoutType)
 {
-    log_error(logger_, "keepalive timeout");
-    if (error_cb_)
-        error_cb_(0);
     disconnection_requested_ = true;
+}
+
+void Master::transport_error_cb(std::exception_ptr eptr)
+{
+    try {
+        std::rethrow_exception(eptr);
+    } catch (std::exception& e) {
+        disconnection_requested_ = true;
+    }
 }
 
 } /* namespace appli */

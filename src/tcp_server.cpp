@@ -96,10 +96,11 @@ void Server::run()
     while (is_running()) {
         try {
             io_context_.run();
-            log_info(logger_, "break");
             break; // run exited normally
         } catch (std::exception& e) {
             log_error(logger_, e.what());
+            if (error_cb_)
+                error_cb_(std::current_exception());
         }
     }
 }

@@ -17,7 +17,6 @@ void RequestManager::start()
         return;
     log_debug(logger_, "starting request manager...");
     clear();
-    log_debug(logger_, "cleared");
     common::Thread::start(true);
     log_debug(logger_, "request manager started");
 }

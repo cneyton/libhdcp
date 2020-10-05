@@ -9,9 +9,10 @@ Slave::Slave(common::Logger logger, const Identification& id,
     common::Log(logger), statemachine_(logger, "com_slave", states_, State::init),
     transport_(std::move(transport)),
     request_manager_(logger, transport_.get(), std::bind(&Slave::timeout_cb, this)),
-    id_(id)
+    slave_id_(id)
 {
     statemachine_.display_trace();
+    transport_->set_error_cb(std::bind(&Slave::transport_error_cb, this, std::placeholders::_1));
 }
 
 Slave::~Slave()
@@ -23,18 +24,22 @@ void Slave::start()
 {
     if (is_running())
         return;
+    log_debug(logger_, "starting application...");
     common::Thread::start(true);
+    log_debug(logger_, "application started");
 }
 
 void Slave::stop()
 {
     if (!is_running())
         return;
+    log_debug(logger_, "stopping application...");
     common::Thread::stop();
     if (joinable())
         join();
     transport_->stop();
     request_manager_.stop();
+    log_debug(logger_, "application stopped");
 }
 
 void Slave::send_data(std::vector<Packet::Block>& blocks)
@@ -58,11 +63,18 @@ void Slave::wait_connected()
 
 void Slave::disconnect()
 {
+    if (get_state() == State::disconnected)
+        return;
+    std::unique_lock<std::mutex> lk(mutex_disconnection_);
     disconnection_requested_ = true;
+    cv_disconnection_.wait(lk, [this]{return !disconnection_requested_;});
 }
 
 int Slave::handler_state_init()
 {
+    connection_requested_    = false;
+    ka_received_             = false;
+    disconnection_requested_ = false;
     notify_running(0);
     return 0;
 }
@@ -70,10 +82,19 @@ int Slave::handler_state_init()
 int Slave::handler_state_disconnected()
 {
     if (statemachine_.get_nb_loop_in_current_state() == 1) {
-        disconnection_requested_ = false;
+        master_id_ = Identification();
         request_manager_.stop_keepalive_management();
         request_manager_.stop();
+        transport_->stop();
+        {
+            // notify disconnected
+            std::unique_lock<std::mutex> lk(mutex_disconnection_);
+            disconnection_requested_ = false;
+            cv_disconnection_.notify_all();
+        }
+        // restart transport
         transport_->start();
+        log_debug(logger_, "waiting hip ...");
     }
 
     Packet p;
@@ -86,7 +107,7 @@ int Slave::handler_state_disconnected()
         connection_requested_ = true;
         set_master_id(p);
         request_manager_.start();
-        request_manager_.send_dip(id_);
+        request_manager_.send_dip(slave_id_);
         request_manager_.start_keepalive_management(keepalive_timeout);
         break;
     default:
@@ -130,9 +151,6 @@ int Slave::handler_state_connected()
         cv_connecting_.notify_all();
     }
 
-    if (!transport_)
-        throw hdcp::application_error("transport null pointer");
-
     Packet p;
     if (!transport_->read(p))
         return 0;
@@ -143,6 +161,7 @@ int Slave::handler_state_connected()
         connection_requested_ = true;
         break;
     case Packet::Type::cmd:
+        request_manager_.keepalive();
         // The cb should send an ack if the cmd is well formated
         if (cmd_cb_)
             cmd_cb_(p);
@@ -189,8 +208,9 @@ void Slave::run()
     while (is_running()) {
         try {
             statemachine_.wakeup();
-        } catch (hdcp::packet_error& e) {
-            log_warn(logger_, e.what());
+        } catch (std::exception& e) {
+            log_error(logger_, e.what());
+            disconnection_requested_ = true;
         }
     }
 }
@@ -220,10 +240,16 @@ void Slave::set_master_id(const Packet& p)
 
 void Slave::timeout_cb()
 {
-    log_error(logger_, "keepalive timeout");
-    if (error_cb_)
-        error_cb_(0);
     disconnection_requested_ = true;
+}
+
+void Slave::transport_error_cb(std::exception_ptr eptr)
+{
+    try {
+        std::rethrow_exception(eptr);
+    } catch (std::exception& e) {
+        disconnection_requested_ = true;
+    }
 }
 
 } /* namespace appli  */

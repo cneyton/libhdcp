@@ -77,13 +77,15 @@ private:
     std::atomic_bool ka_received_             = false;
     std::atomic_bool disconnection_requested_ = false;
 
+    std::mutex              mutex_disconnection_;
+    std::condition_variable cv_disconnection_;
     std::mutex              mutex_connecting_;
     std::condition_variable cv_connecting_;
 
     common::Statemachine<State>   statemachine_;
     std::unique_ptr<Transport>    transport_;
     slave::RequestManager         request_manager_;
-    Identification                id_;
+    Identification                slave_id_;
     Identification                master_id_;
     CmdCallback                   cmd_cb_;
     ErrorCallback                 error_cb_;
@@ -91,6 +93,7 @@ private:
     void run() override;
     void set_master_id(const Packet& p);
     void timeout_cb();
+    void transport_error_cb(std::exception_ptr);
 };
 
 } /* namespace appli  */
