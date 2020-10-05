@@ -127,6 +127,7 @@ void Client::read_payload()
     } catch (hdcp::packet_error& e) {
         log_error(logger_, "{}", e.what());
         read_header();
+        return;
     }
 
     auto pl = read_packet_.payload();
