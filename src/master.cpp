@@ -43,8 +43,8 @@ void Master::stop()
     }
     if (joinable())
         join();
-    transport_->stop();
     request_manager_.stop();
+    transport_->stop();
     log_debug(logger_, "application stopped");
 }
 
