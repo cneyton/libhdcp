@@ -58,7 +58,7 @@ void Master::send_command(Packet::BlockType id, const std::string& data, Request
 
 const Identification& Master::connect()
 {
-    if (get_state() != State::disconnected)
+    if (get_state() == State::connected)
         return slave_id_;
 
     {
