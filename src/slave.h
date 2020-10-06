@@ -28,6 +28,7 @@ public:
 
     State get_state() const {return statemachine_.get_state();};
     const Identification& get_master_id() const {return master_id_;}
+    const Identification& get_slave_id()  const {return slave_id_;}
 
     void start();
     void stop() override;
