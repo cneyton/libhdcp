@@ -42,6 +42,10 @@ target_link_libraries(hdcp
     PRIVATE usb-1.0)
 target_compile_options(hdcp PUBLIC -Wall -Wextra)
 
+# configure
+configure_file(config.h.in config.h)
+target_include_directories(hdcp PUBLIC ${PROJECT_BINARY_DIR})
+
 ################################################################################
 # Tests
 ################################################################################
