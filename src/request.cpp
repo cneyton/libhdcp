@@ -25,9 +25,11 @@ void RequestManager::stop()
 {
     if (!is_running())
         return;
+    log_debug(logger_, "stopping request manager...");
     common::Thread::stop();
     if (joinable())
         join();
+    log_debug(logger_, "request manager stopped");
 }
 
 void RequestManager::send_command(Packet::BlockType type, const std::string& data,
@@ -228,9 +230,11 @@ void RequestManager::stop()
 {
     if (!is_running())
         return;
+    log_debug(logger_, "stopping request manager...");
     common::Thread::stop();
     if (joinable())
         join();
+    log_debug(logger_, "request manager stopped");
 }
 
 void RequestManager::send_cmd_ack(const Packet& packet)
