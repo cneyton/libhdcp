@@ -34,7 +34,11 @@ void Server::start()
     if (is_running())
         return;
     log_debug(logger_, "starting transport...");
+    clear_queues();
+    write_in_progress_ = false;
     open();
+    read_header();
+    io_context_.restart();
     common::Thread::start(0);
     log_debug(logger_, "transport started");
 }
@@ -44,16 +48,8 @@ void Server::open()
     if (is_open())
         return;
     log_debug(logger_, "opening transport, begin accepting connection...");
-    acceptor_.async_accept(socket_,
-        [this](const boost::system::error_code& ec)
-        {
-            if (!ec) {
-                log_debug(logger_, "connection accepted, transport opened");
-                read_header();
-            } else {
-                throw asio_error(ec);
-            }
-        });
+    acceptor_.accept(socket_);
+    log_debug(logger_, "connection accepted, transport opened");
 }
 
 void Server::close()
@@ -61,12 +57,9 @@ void Server::close()
     if (!is_open())
         return;
     log_debug(logger_, "closing transport...");
-    boost::asio::post(io_context_,
-        [this] ()
-        {
-            socket_.close();
-            log_debug(logger_, "transport closed");
-        });
+    socket_.shutdown(boost::asio::socket_base::shutdown_type::shutdown_both);
+    socket_.close();
+    log_debug(logger_, "transport closed");
 }
 
 bool Server::is_open()
@@ -113,7 +106,6 @@ void Server::read_header()
         [this](const boost::system::error_code& ec, size_t)
         {
             if (!ec) {
-
                 read_payload();
             } else {
                 throw asio_error(ec);

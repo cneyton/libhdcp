@@ -49,7 +49,11 @@ void Client::start()
     if (is_running())
         return;
     log_debug(logger_, "starting transport...");
+    clear_queues();
+    write_in_progress_ = false;
     open();
+    read_header();
+    io_context_.restart();
     common::Thread::start(0);
     log_debug(logger_, "transport started");
 };
@@ -61,16 +65,8 @@ void Client::open()
     log_debug(logger_, "opening transport...");
     boost::asio::ip::tcp::resolver resolver(io_context_);
     auto endpoints = resolver.resolve(host_, service_);
-    boost::asio::async_connect(socket_, endpoints,
-       [this](const boost::system::error_code& ec, const boost::asio::ip::tcp::endpoint&)
-       {
-           if (!ec) {
-               log_debug(logger_, "transport opened");
-               read_header();
-           } else {
-               throw asio_error(ec);
-           }
-       });
+    boost::asio::connect(socket_, endpoints);
+    log_debug(logger_, "transport opened");
 }
 
 void Client::close()
@@ -78,12 +74,9 @@ void Client::close()
     if (!is_open())
         return;
     log_debug(logger_, "closing transport...");
-    boost::asio::post(io_context_,
-        [this] ()
-        {
-            socket_.close();
-            log_debug(logger_, "transport closed");
-        });
+    socket_.shutdown(boost::asio::socket_base::shutdown_type::shutdown_both);
+    socket_.close();
+    log_debug(logger_, "transport closed");
 }
 
 bool Client::is_open()
