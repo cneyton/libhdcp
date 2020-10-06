@@ -96,7 +96,7 @@ private:
 
         switch (choice) {
         case 0:
-            com_.wait_connected();
+            com_.connect();
             break;
         case 1:
             com_.disconnect();
@@ -130,7 +130,11 @@ private:
     void run() override
     {
         while (is_running()) {
-            test_command();
+            try {
+                test_command();
+            } catch (std::exception& e) {
+                log_error(logger_, e.what());
+            }
         }
     }
 };

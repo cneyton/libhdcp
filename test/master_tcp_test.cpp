@@ -125,7 +125,11 @@ private:
     void run() override
     {
         while (is_running()) {
-            test_command();
+            try {
+                test_command();
+            } catch (std::exception& e) {
+                log_error(logger_, e.what());
+            }
         }
     }
 };
