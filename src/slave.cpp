@@ -35,10 +35,15 @@ void Slave::stop()
         return;
     log_debug(logger_, "stopping application...");
     common::Thread::stop();
+    {
+        // wake-up in case we were waiting to connect
+        std::unique_lock<std::mutex> lk(mutex_connection_);
+        cv_connection_.notify_all();
+    }
     if (joinable())
         join();
-    transport_->stop();
     request_manager_.stop();
+    transport_->stop();
     log_debug(logger_, "application stopped");
 }
 
@@ -55,10 +60,27 @@ void Slave::send_cmd_ack(const Packet& packet)
     request_manager_.send_cmd_ack(packet);
 }
 
-void Slave::wait_connected()
+const Identification& Slave::connect()
 {
+    if (get_state() == State::connected)
+        return master_id_;
+
+    {
+        // wake-up if we were waiting to connect
+        std::unique_lock<std::mutex> lk(mutex_connection_);
+        disconnection_requested_ = false;
+        connection_requested_ = true;
+        cv_connection_.notify_all();
+    }
+
     std::unique_lock<std::mutex> lk(mutex_connecting_);
-    cv_connecting_.wait(lk, [&]{return statemachine_.get_state() == State::connected;});
+    transport_->start();
+    cv_connecting_.wait(lk, [&]{return !connection_requested_ &&
+                        statemachine_.get_state() != State::connecting;});
+
+    if (statemachine_.get_state() != State::connected)
+        throw application_error("connection failed");
+    return master_id_;
 }
 
 void Slave::disconnect()
@@ -73,6 +95,7 @@ void Slave::disconnect()
 int Slave::handler_state_init()
 {
     connection_requested_    = false;
+    hip_received_            = false;
     ka_received_             = false;
     disconnection_requested_ = false;
     notify_running(0);
@@ -92,9 +115,15 @@ int Slave::handler_state_disconnected()
             disconnection_requested_ = false;
             cv_disconnection_.notify_all();
         }
-        // restart transport
-        transport_->start();
-        log_debug(logger_, "waiting hip ...");
+        {
+            // notify connection attempt failed
+            std::unique_lock<std::mutex> lk(mutex_connecting_);
+            cv_connecting_.notify_all();
+        }
+        log_debug(logger_, "waiting connection request...");
+        wait_connection_request();
+        // return here to not wait for packet when stopping
+        return 0;
     }
 
     Packet p;
@@ -104,11 +133,8 @@ int Slave::handler_state_disconnected()
     log_trace(logger_, "{}", p);
     switch (p.type()) {
     case Packet::Type::hip:
-        connection_requested_ = true;
+        hip_received_ = true;
         set_master_id(p);
-        request_manager_.start();
-        request_manager_.send_dip(slave_id_);
-        request_manager_.start_keepalive_management(keepalive_timeout);
         break;
     default:
         log_warn(logger_, "you should only receive hip in disconnected state");
@@ -122,6 +148,10 @@ int Slave::handler_state_connecting()
 {
     if (statemachine_.get_nb_loop_in_current_state() == 1) {
         connection_requested_ = false;
+        hip_received_ = false;
+        request_manager_.start();
+        request_manager_.send_dip(slave_id_);
+        request_manager_.start_keepalive_management(keepalive_timeout);
     }
 
     Packet p;
@@ -146,7 +176,6 @@ int Slave::handler_state_connected()
 {
     if (statemachine_.get_nb_loop_in_current_state() == 1) {
         ka_received_ = false;
-
         std::unique_lock<std::mutex> lk(mutex_connecting_);
         cv_connecting_.notify_all();
     }
@@ -158,7 +187,10 @@ int Slave::handler_state_connected()
     log_trace(logger_, "{}", p);
     switch (p.type()) {
     case Packet::Type::hip:
-        connection_requested_ = true;
+        hip_received_ = true;
+        master_id_ = Identification();
+        request_manager_.stop_keepalive_management();
+        request_manager_.stop();
         break;
     case Packet::Type::cmd:
         request_manager_.keepalive();
@@ -185,8 +217,9 @@ int Slave::check_true()
 
 int Slave::check_connection_requested()
 {
-    return connection_requested_ ? common::statemachine::goto_next_state:
-                                   common::statemachine::stay_curr_state;
+    if (hip_received_)
+        return common::statemachine::goto_next_state;
+    return common::statemachine::stay_curr_state;
 }
 
 int Slave::check_connected()
@@ -213,6 +246,12 @@ void Slave::run()
             disconnection_requested_ = true;
         }
     }
+}
+
+void Slave::wait_connection_request()
+{
+    std::unique_lock<std::mutex> lk(mutex_connection_);
+    cv_connection_.wait(lk, [this]{return (connection_requested_ || !is_running());});
 }
 
 void Slave::set_master_id(const Packet& p)

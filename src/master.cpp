@@ -242,7 +242,7 @@ void Master::set_slave_id(const Packet& p)
             break;
         default:
             log_warn(logger_,
-                     "you should not received this block type ({:#x}) in an identifation packet",
+                     "you should not received this block type ({:#x}) in an identification packet",
                      b.type);
         }
     }

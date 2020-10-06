@@ -34,7 +34,9 @@ public:
     void stop() override;
     void set_cmd_cb(CmdCallback&& cb)     {cmd_cb_  = std::forward<CmdCallback>(cb);}
     void set_error_cb(ErrorCallback&& cb) {error_cb_ = std::forward<ErrorCallback>(cb);}
-    void wait_connected();
+    /// Synchronous connect
+    const Identification& connect();
+    /// Synchronous disconnect
     void disconnect();
     void send_data(std::vector<Packet::Block>& blocks);
     void send_cmd_ack(const Packet& packet);
@@ -75,11 +77,14 @@ private:
 
     // flags
     std::atomic_bool connection_requested_    = false;
+    std::atomic_bool hip_received_            = false;
     std::atomic_bool ka_received_             = false;
     std::atomic_bool disconnection_requested_ = false;
 
     std::mutex              mutex_disconnection_;
     std::condition_variable cv_disconnection_;
+    std::mutex              mutex_connection_;
+    std::condition_variable cv_connection_;
     std::mutex              mutex_connecting_;
     std::condition_variable cv_connecting_;
 
@@ -92,6 +97,7 @@ private:
     ErrorCallback                 error_cb_;
 
     void run() override;
+    void wait_connection_request();
     void set_master_id(const Packet& p);
     void timeout_cb();
     void transport_error_cb(std::exception_ptr);
