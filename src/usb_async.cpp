@@ -227,8 +227,7 @@ void Device::write_cb(libusb_transfer * transfer) noexcept
                 log_error(usb->get_logger(), "unknown transfer status, you should not be here");
         }
     } catch (std::exception& e) {
-        log_error(usb->get_logger(), e.what());
-        usb->call_error_cb(std::current_exception());
+        usb->set_eptr(std::current_exception());
     }
 }
 
@@ -277,22 +276,25 @@ void Device::read_cb(libusb_transfer * transfer) noexcept
                 log_error(usb->get_logger(), "unknown transfer status, you should not be here");
         }
     } catch (std::exception& e) {
-        log_error(usb->get_logger(), e.what());
-        usb->call_error_cb(std::current_exception());
+        usb->set_eptr(std::current_exception());
     }
 }
 
 void Device::run()
 {
-    try {
-        rtransfer_curr_->submit();
-        notify_running(0);
-        while (is_running()) {
+    notify_running(0);
+    while (is_running()) {
+        try {
             libusb_handle_events(ctx_);
+            if (eptr_)
+                std::rethrow_exception(eptr_);
+        } catch (packet_error& e) {
+            log_warn(logger_, e.what());
+        } catch (std::exception& e) {
+            log_error(logger_, e.what());
+            if (error_cb_)
+                error_cb_(std::current_exception());
         }
-    } catch (std::exception& e) {
-        log_error(logger_, e.what());
-        call_error_cb(std::current_exception());
     }
 }
 
@@ -316,6 +318,7 @@ void Device::start()
     log_debug(logger_, "starting transport...");
     clear_queues();
     open();
+    rtransfer_curr_->submit();
     common::Thread::start(true);
     log_debug(logger_, "transport started");
 }
@@ -353,12 +356,6 @@ void Device::log_cb(libusb_context*, libusb_log_level lvl, const char* str) noex
     default:
         break;
     }
-}
-
-void Device::call_error_cb(std::exception_ptr eptr) const
-{
-    if (error_cb_)
-        error_cb_(eptr);
 }
 
 } /* namespace usb  */

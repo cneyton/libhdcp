@@ -76,7 +76,7 @@ public:
     void open()    override;
     void close()   override;
 
-    void call_error_cb(std::exception_ptr) const;
+    void set_eptr(std::exception_ptr eptr) {eptr_ = eptr;};
 
 private:
     using common::Thread::start;
@@ -106,6 +106,8 @@ private:
      */
     static void write_cb(libusb_transfer * transfer) noexcept;
     static void read_cb(libusb_transfer * transfer)  noexcept;
+
+    std::exception_ptr eptr_;
 
     void run() override;
 
