@@ -143,15 +143,16 @@ void Device::close()
     wtransfer_      = nullptr;
     rtransfer_curr_ = nullptr;
     rtransfer_prev_ = nullptr;
-    // release interface & close
-    int ret;
-    if ((ret = libusb_release_interface(device_handle_, itfc_nb_)) < 0)
-        throw hdcp::libusb_error(ret);
+    // release interface
+    int ret = libusb_release_interface(device_handle_, itfc_nb_);
+    // even if we cannot release the itfc, the device is closed
     libusb_close(device_handle_);
     device_handle_ = nullptr;
 
     open_ = false;
     log_debug(logger_, "transport closed");
+    if (ret < 0)
+        throw libusb_error(ret);
 }
 
 void Device::write(Packet&& p)
@@ -303,9 +304,13 @@ void Device::stop()
     if (!is_running())
         return;
     log_debug(logger_, "stopping transport...");
-    cancel_transfers();
-    common::Thread::stop();
-    close();
+    try {
+        cancel_transfers();
+        common::Thread::stop();
+        close();
+    } catch (libusb_error& e) {
+        log_warn(logger_, e.what());
+    }
     if (joinable())
         join();
     log_debug(logger_, "transport stopped");
