@@ -95,6 +95,7 @@ private:
     Identification                master_id_;
     CmdCallback                   cmd_cb_;
     ErrorCallback                 error_cb_;
+    Packet::Id                    received_packet_id_;
 
     void run() override;
     void wait_connection_request();

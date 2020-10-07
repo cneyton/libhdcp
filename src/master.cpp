@@ -135,6 +135,9 @@ int Master::handler_state_connecting()
     log_trace(logger_, "{}", p);
     switch (p.type()) {
     case Packet::Type::dip:
+        if (p.id() != 1)
+            log_warn(logger_, "dip id should be 0");
+        received_packet_id_ = p.id();
         set_slave_id(p);
         dip_received_ = true;
         request_manager_.ack_dip();
@@ -161,6 +164,10 @@ int Master::handler_state_connected()
         return 0;
 
     log_trace(logger_, "{}", p);
+    if (++received_packet_id_ != p.id()) {
+        log_warn(logger_, "packet loss: received {}, expected {}", p.id(), received_packet_id_);
+        received_packet_id_ = p.id();
+    }
     switch (p.type()) {
     case Packet::Type::cmd_ack:
         request_manager_.ack_command(p);

@@ -93,6 +93,7 @@ private:
     Identification                slave_id_;
     DataCallback                  data_cb_;
     ErrorCallback                 error_cb_;
+    Packet::Id                    received_packet_id_;
 
     void run() override;
     void wait_connection_request();

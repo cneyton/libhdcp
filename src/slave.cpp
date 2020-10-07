@@ -133,6 +133,9 @@ int Slave::handler_state_disconnected()
     log_trace(logger_, "{}", p);
     switch (p.type()) {
     case Packet::Type::hip:
+        if (p.id() != 1)
+            log_warn(logger_, "hip id should be 0");
+        received_packet_id_ = p.id();
         hip_received_ = true;
         set_master_id(p);
         break;
@@ -159,6 +162,11 @@ int Slave::handler_state_connecting()
         return 0;
 
     log_trace(logger_, "{}", p);
+    if (++received_packet_id_ != p.id()) {
+        log_warn(logger_, "packet loss: received {}, expected {}", p.id(), received_packet_id_);
+        received_packet_id_ = p.id();
+    }
+
     switch (p.type()) {
     case Packet::Type::ka:
         request_manager_.keepalive();
@@ -185,6 +193,11 @@ int Slave::handler_state_connected()
         return 0;
 
     log_trace(logger_, "{}", p);
+    if (++received_packet_id_ != p.id()) {
+        log_warn(logger_, "packet loss: received {}, expected {}", p.id(), received_packet_id_);
+        received_packet_id_ = p.id();
+    }
+
     switch (p.type()) {
     case Packet::Type::hip:
         hip_received_ = true;
