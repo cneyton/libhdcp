@@ -1,4 +1,4 @@
 [submodule "dependencies/libcommon"]
     path = dependencies/libcommon
-    url = git@gitlab.nateo-healthcare.com:zenpreg/libcommon.git
+    url = ../libcommon.git
     branch = .
