@@ -1,0 +1,29 @@
+variables:
+    GIT_SUBMODULE_STRATEGY: recursive
+
+stages:
+    - build
+
+default_build:
+    stage: build
+    image: nateo/docker-pc104
+    script:
+        - mkdir build -p
+        - cd build
+        - cmake ..
+        - make
+
+release_build:
+    stage: build
+    image: nateo/docker-pc104
+    script:
+        - mkdir build -p
+        - cd build
+        - cmake .. -DMEMORY_RUNTESTS=True
+        - make
+    artifacts:
+        name: "${CI_BUILD_NAME}"
+        paths:
+            - build/test
+    only:
+        - tags
