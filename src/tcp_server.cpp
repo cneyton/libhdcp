@@ -95,6 +95,7 @@ void Server::run()
             log_warn(logger_, e.what());
         } catch (std::exception& e) {
             log_error(logger_, e.what());
+            close();
             if (error_cb_)
                 error_cb_(std::current_exception());
         }
