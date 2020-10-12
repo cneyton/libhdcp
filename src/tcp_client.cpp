@@ -91,6 +91,8 @@ void Client::run()
         try {
             io_context_.run();
             break; // run exited normally
+        } catch (packet_error& e) {
+            log_warn(logger_, e.what());
         } catch (std::exception& e) {
             log_error(logger_, e.what());
             if (error_cb_)
