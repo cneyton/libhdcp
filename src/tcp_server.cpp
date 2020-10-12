@@ -39,7 +39,7 @@ void Server::start()
     open();
     read_header();
     io_context_.restart();
-    common::Thread::start(0);
+    common::Thread::start(true);
     log_debug(logger_, "transport started");
 }
 
@@ -86,6 +86,7 @@ void Server::write(Packet&& p)
 
 void Server::run()
 {
+    notify_running(0);
     while (is_running()) {
         try {
             io_context_.run();
