@@ -38,7 +38,7 @@ public:
     const Identification& connect();
     /// Synchronous disconnect
     void disconnect();
-    void send_data(std::vector<Packet::Block>& blocks);
+    void send_data(std::vector<Packet::BlockView>& blocks);
     void send_cmd_ack(const Packet& packet);
 
 private:

@@ -28,6 +28,13 @@ public:
     struct Block
     {
         BlockType        type;
+        std::string      data;
+    };
+
+    /// Non-owning view of a block inside a packet
+    struct BlockView
+    {
+        BlockType        type;
         std::string_view data;
     };
 
@@ -56,8 +63,8 @@ public:
     size_t   size()     const {return payload().size() + sizeof(Header);}
     char *   data()           {return data_.data();}
     const char * data() const {return data_.data();}
-    std::vector<Block> blocks()    const {return blocks(payload());};
-    std::string_view header_view() const {return std::string_view(data_.data(), sizeof(Header));};
+    std::vector<BlockView> blocks() const {return blocks(payload());};
+    std::string_view header_view()  const {return std::string_view(data_.data(), sizeof(Header));};
     std::string_view payload() const
     {
         return std::string_view(data_.data() + sizeof(Packet::Header), header()->len);
@@ -68,7 +75,7 @@ public:
 
     static Packet make_command(Id, BlockType, const std::string&);
     static Packet make_cmd_ack(Id, BlockType, Id);
-    static Packet make_data(Id, std::vector<Block>& blocks);
+    static Packet make_data(Id, std::vector<BlockView>& blocks);
     static Packet make_keepalive(Id id);
     static Packet make_keepalive_ack(Id id);
     static Packet make_hip(Id id, const hdcp::Identification& host_id);
@@ -102,8 +109,8 @@ private:
     static Crc compute_crc(std::string_view);
     static std::string make_header(Id id, Type type, uint8_t n_block, const std::string& payload);
     static std::string make_block(BlockType type, const std::string& data);
-    static std::string make_block(Block& b);
-    static std::vector<Block> blocks(std::string_view);
+    static std::string make_block(BlockView& b);
+    static std::vector<BlockView> blocks(std::string_view);
     static const Header * parse_header(std::string_view);
     static void parse_payload(std::string_view, const Header *);
 

@@ -100,6 +100,8 @@ private:
     void set_slave_id(const Packet& p);
     void timeout_cb(master::RequestManager::TimeoutType);
     void transport_error_cb(std::exception_ptr);
+    void disconnected_cb();
+    void connected_cb();
 };
 
 } /* namespace appli  */

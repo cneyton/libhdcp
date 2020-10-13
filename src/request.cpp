@@ -244,7 +244,7 @@ void RequestManager::send_cmd_ack(const Packet& packet)
                                                packet.blocks().at(0).type, packet.id()));
 }
 
-void RequestManager::send_data(std::vector<Packet::Block>& blocks)
+void RequestManager::send_data(std::vector<Packet::BlockView>& blocks)
 {
     if (transport_)
         transport_->write(Packet::make_data(++packet_id_, blocks));

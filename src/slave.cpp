@@ -47,7 +47,7 @@ void Slave::stop()
     log_debug(logger_, "application stopped");
 }
 
-void Slave::send_data(std::vector<Packet::Block>& blocks)
+void Slave::send_data(std::vector<Packet::BlockView>& blocks)
 {
     if (get_state() != State::connected)
         throw hdcp::application_error("can't send data while disconnected");

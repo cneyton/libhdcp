@@ -39,7 +39,7 @@ Packet Packet::make_cmd_ack(Id id, BlockType type, Id cmd_id)
     return Packet(header + payload);
 }
 
-Packet Packet::make_data(Id id, std::vector<Block>& blocks)
+Packet Packet::make_data(Id id, std::vector<BlockView>& blocks)
 {
     std::string payload;
     for (auto& b: blocks) {
@@ -119,17 +119,17 @@ std::string Packet::make_header(Id id, Type type, uint8_t n_block, const std::st
 
 std::string Packet::make_block(BlockType type, const std::string& data)
 {
-    Block b = {
+    BlockView b = {
         .type = type,
         .data = data
     };
     return Packet::make_block(b);
 }
 
-std::string Packet::make_block(Block& b)
+std::string Packet::make_block(BlockView& b)
 {
     char * it = reinterpret_cast<char*>(&b.type);
-    std::string type_str(it, it + sizeof(Block::type));
+    std::string type_str(it, it + sizeof(BlockType));
 
     uint16_t len = b.data.size();
     it = reinterpret_cast<char*>(&len);
@@ -141,16 +141,16 @@ std::string Packet::make_block(Block& b)
     return ret;
 }
 
-std::vector<Packet::Block> Packet::blocks(std::string_view payload)
+std::vector<Packet::BlockView> Packet::blocks(std::string_view payload)
 {
-    std::vector<Block> blocks;
+    std::vector<BlockView> blocks;
     auto it = payload.begin();
     while (it + sizeof(BHeader) <= payload.end()) {
         const BHeader * header = reinterpret_cast<const BHeader*>(it);
         it += sizeof(Packet::BHeader);
         if (it + header->len > payload.end())
             break;
-        Block b = {
+        BlockView b = {
             .type = header->type,
             .data = std::string_view(it, header->len),
         };
