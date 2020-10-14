@@ -55,6 +55,14 @@ void Slave::send_data(std::vector<Packet::BlockView>& blocks)
     request_manager_.send_data(blocks);
 }
 
+void Slave::send_data(std::vector<Packet::Block>& blocks)
+{
+    if (get_state() != State::connected)
+        throw hdcp::application_error("can't send data while disconnected");
+
+    request_manager_.send_data(blocks);
+}
+
 void Slave::send_cmd_ack(const Packet& packet)
 {
     request_manager_.send_cmd_ack(packet);

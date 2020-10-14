@@ -49,6 +49,16 @@ Packet Packet::make_data(Id id, std::vector<BlockView>& blocks)
     return Packet(header + payload);
 }
 
+Packet Packet::make_data(Id id, std::vector<Block>& blocks)
+{
+    std::string payload;
+    for (auto& b: blocks) {
+        payload += Packet::make_block(b);
+    }
+    std::string header(Packet::make_header(id, Packet::Type::data, blocks.size(), payload));
+    return Packet(header + payload);
+}
+
 Packet Packet::make_keepalive(Id id)
 {
     std::string payload;
@@ -119,14 +129,13 @@ std::string Packet::make_header(Id id, Type type, uint8_t n_block, const std::st
 
 std::string Packet::make_block(BlockType type, const std::string& data)
 {
-    BlockView b = {
-        .type = type,
-        .data = data
-    };
+    BlockView b;
+    b.type = type;
+    b.data = data;
     return Packet::make_block(b);
 }
 
-std::string Packet::make_block(BlockView& b)
+std::string Packet::make_block(BlockView b)
 {
     char * it = reinterpret_cast<char*>(&b.type);
     std::string type_str(it, it + sizeof(BlockType));
@@ -150,10 +159,9 @@ std::vector<Packet::BlockView> Packet::blocks(std::string_view payload)
         it += sizeof(Packet::BHeader);
         if (it + header->len > payload.end())
             break;
-        BlockView b = {
-            .type = header->type,
-            .data = std::string_view(it, header->len),
-        };
+        BlockView b;
+        b.type = header->type;
+        b.data = std::string_view(it, header->len);
         it += header->len;
         blocks.push_back(b);
     }

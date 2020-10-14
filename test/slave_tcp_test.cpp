@@ -103,11 +103,10 @@ private:
             break;
         case 2:
             {
-                std::string data(1000, 'a');
-                std::vector<hdcp::Packet::BlockView> blocks = {
+                std::vector<hdcp::Packet::Block> blocks = {
                     {
                         .type = 0x2854,
-                        .data = data
+                        .data = std::string(1000, 'a')
                     }
                 };
                 log_info(logger_, "start sending data...");

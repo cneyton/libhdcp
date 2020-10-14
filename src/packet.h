@@ -25,8 +25,10 @@ public:
         sw_version    = 0x0004
     };
 
+    struct BlockView;
     struct Block
     {
+        explicit operator BlockView() const noexcept {return BlockView();};
         BlockType        type;
         std::string      data;
     };
@@ -34,6 +36,8 @@ public:
     /// Non-owning view of a block inside a packet
     struct BlockView
     {
+        BlockView() = default;
+        BlockView(const Block& from): type(from.type), data(from.data) {};
         BlockType        type;
         std::string_view data;
     };
@@ -76,6 +80,7 @@ public:
     static Packet make_command(Id, BlockType, const std::string&);
     static Packet make_cmd_ack(Id, BlockType, Id);
     static Packet make_data(Id, std::vector<BlockView>& blocks);
+    static Packet make_data(Id, std::vector<Block>& blocks);
     static Packet make_keepalive(Id id);
     static Packet make_keepalive_ack(Id id);
     static Packet make_hip(Id id, const hdcp::Identification& host_id);
@@ -109,7 +114,7 @@ private:
     static Crc compute_crc(std::string_view);
     static std::string make_header(Id id, Type type, uint8_t n_block, const std::string& payload);
     static std::string make_block(BlockType type, const std::string& data);
-    static std::string make_block(BlockView& b);
+    static std::string make_block(BlockView b);
     static std::vector<BlockView> blocks(std::string_view);
     static const Header * parse_header(std::string_view);
     static void parse_payload(std::string_view, const Header *);

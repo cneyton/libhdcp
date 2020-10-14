@@ -250,6 +250,12 @@ void RequestManager::send_data(std::vector<Packet::BlockView>& blocks)
         transport_->write(Packet::make_data(++packet_id_, blocks));
 }
 
+void RequestManager::send_data(std::vector<Packet::Block>& blocks)
+{
+    if (transport_)
+        transport_->write(Packet::make_data(++packet_id_, blocks));
+}
+
 void RequestManager::send_dip(const Identification& id)
 {
     if (transport_)
