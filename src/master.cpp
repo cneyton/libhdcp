@@ -207,7 +207,7 @@ int Master::check_connected()
 
 int Master::check_disconnected()
 {
-    if (disconnection_requested_)
+    if (disconnection_requested_ || !transport_->is_open())
         return common::statemachine::goto_next_state;
 
     return common::statemachine::stay_curr_state;
