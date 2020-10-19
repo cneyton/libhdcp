@@ -246,14 +246,27 @@ void RequestManager::send_cmd_ack(const Packet& packet)
 
 void RequestManager::send_data(std::vector<Packet::BlockView>& blocks)
 {
-    if (transport_)
-        transport_->write(Packet::make_data(++packet_id_, blocks));
+    std::vector<Packet::BlockView> payload;
+    size_t payload_size = 0;
+    for (auto& b: blocks) {
+        if (b.size() > Packet::max_pl_size)
+            throw application_error(fmt::format("a block of size {} is too big to be sent",
+                                                b.size()));
+        if (payload_size + b.size() > Packet::max_pl_size) {
+            transport_->write(Packet::make_data(++packet_id_, payload));
+            payload.clear();
+            payload_size = 0;
+        }
+        payload.push_back(b);
+        payload_size += b.size();
+    }
 }
 
 void RequestManager::send_data(std::vector<Packet::Block>& blocks)
 {
-    if (transport_)
-        transport_->write(Packet::make_data(++packet_id_, blocks));
+    std::vector<Packet::BlockView> view;
+    std::copy(blocks.begin(), blocks.end(), std::back_inserter(view));
+    send_data(view);
 }
 
 void RequestManager::send_dip(const Identification& id)

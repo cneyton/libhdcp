@@ -16,8 +16,6 @@ public:
     using Id        = uint16_t;
     using BlockType = uint16_t;
 
-    static const size_t max_size = 2048;
-
     enum ReservedBlockType: BlockType {
         name          = 0x0001,
         serial_number = 0x0002,
@@ -29,6 +27,7 @@ public:
     struct Block
     {
         explicit operator BlockView() const noexcept {return BlockView();};
+        size_t size() {return data.size() + sizeof(BHeader);};
         BlockType        type;
         std::string      data;
     };
@@ -38,6 +37,8 @@ public:
     {
         BlockView() = default;
         BlockView(const Block& from): type(from.type), data(from.data) {};
+        size_t size() {return data.size() + sizeof(BHeader);};
+
         BlockType        type;
         std::string_view data;
     };
@@ -111,6 +112,11 @@ private:
         uint16_t  len;
     }__attribute__((packed));
 
+public:
+    static const size_t max_size    = 2048;
+    static const size_t max_pl_size = max_size - sizeof(Header);
+
+private:
     static Crc compute_crc(std::string_view);
     static std::string make_header(Id id, Type type, uint8_t n_block, const std::string& payload);
     static std::string make_block(BlockType type, const std::string& data);
