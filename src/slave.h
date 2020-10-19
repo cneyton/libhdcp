@@ -14,7 +14,7 @@ namespace appli {
 class Slave: public common::Log, private common::Thread
 {
 public:
-    using CmdCallback   = std::function<void(const Packet&)>;
+    using CmdCallback   = std::function<void(const Packet::BlockView&)>;
     using ErrorCallback = std::function<void(int ec)>;
     enum class State {
         init,
@@ -26,13 +26,13 @@ public:
     Slave(common::Logger logger, const Identification& id, std::unique_ptr<Transport> transport);
     ~Slave();
 
-    State get_state() const {return statemachine_.get_state();};
+    State state() const {return statemachine_.get_state();};
     const Identification& get_master_id() const {return master_id_;}
     const Identification& get_slave_id()  const {return slave_id_;}
 
     void start();
     void stop() override;
-    void set_cmd_cb(CmdCallback&& cb)     {cmd_cb_  = std::forward<CmdCallback>(cb);}
+    void set_cmd_cb(CmdCallback&& cb)     {cmd_cb_   = std::forward<CmdCallback>(cb);}
     void set_error_cb(ErrorCallback&& cb) {error_cb_ = std::forward<ErrorCallback>(cb);}
     /// Synchronous connect
     const Identification& connect();
@@ -40,7 +40,6 @@ public:
     void disconnect();
     void send_data(std::vector<Packet::BlockView>&);
     void send_data(std::vector<Packet::Block>&);
-    void send_cmd_ack(const Packet& packet);
 
 private:
     using common::Thread::start;

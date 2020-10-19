@@ -49,7 +49,7 @@ void Slave::stop()
 
 void Slave::send_data(std::vector<Packet::BlockView>& blocks)
 {
-    if (get_state() != State::connected)
+    if (state() != State::connected)
         throw hdcp::application_error("can't send data while disconnected");
 
     request_manager_.send_data(blocks);
@@ -57,20 +57,15 @@ void Slave::send_data(std::vector<Packet::BlockView>& blocks)
 
 void Slave::send_data(std::vector<Packet::Block>& blocks)
 {
-    if (get_state() != State::connected)
+    if (state() != State::connected)
         throw hdcp::application_error("can't send data while disconnected");
 
     request_manager_.send_data(blocks);
 }
 
-void Slave::send_cmd_ack(const Packet& packet)
-{
-    request_manager_.send_cmd_ack(packet);
-}
-
 const Identification& Slave::connect()
 {
-    if (get_state() == State::connected)
+    if (state() == State::connected)
         return master_id_;
 
     {
@@ -83,17 +78,16 @@ const Identification& Slave::connect()
 
     std::unique_lock<std::mutex> lk(mutex_connecting_);
     transport_->start();
-    cv_connecting_.wait(lk, [&]{return !connection_requested_ &&
-                        statemachine_.get_state() != State::connecting;});
+    cv_connecting_.wait(lk, [&]{return !connection_requested_ && state() != State::connecting;});
 
-    if (statemachine_.get_state() != State::connected)
+    if (state() != State::connected)
         throw application_error("connection failed");
     return master_id_;
 }
 
 void Slave::disconnect()
 {
-    if (get_state() == State::disconnected)
+    if (state() == State::disconnected)
         return;
     std::unique_lock<std::mutex> lk(mutex_disconnection_);
     disconnection_requested_ = true;
@@ -214,11 +208,23 @@ int Slave::handler_state_connected()
         request_manager_.stop();
         break;
     case Packet::Type::cmd:
+    {
         request_manager_.keepalive();
-        // The cb should send an ack if the cmd is well formated
-        if (cmd_cb_)
-            cmd_cb_(p);
+        request_manager_.send_cmd_ack(p);
+        auto blocks = p.blocks();
+        if (blocks.size() != 1) {
+            log_warn(logger_, "you should receive exactly one block in cmds (received {})",
+                     blocks.size());
+            break;
+        }
+        try {
+            if (cmd_cb_)
+                cmd_cb_(blocks[0]);
+        } catch (std::exception& e) {
+            log_error(logger_, "failed to process command {}", p.id());
+        }
         break;
+    }
     case Packet::Type::ka:
         request_manager_.keepalive();
         break;
