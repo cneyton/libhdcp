@@ -70,15 +70,13 @@ bool Server::is_open()
 void Server::write(Packet&& p)
 {
     if (!is_open())
-        throw transport_error("can't write while transport is closed",
-                              transport_error::Code::not_permitted);
+        throw transport_error(TransportErrc::not_permitted);
 
     boost::asio::post(io_context_,
         [this, p] ()
         {
             if (!write_queue_.try_enqueue(p))
-                throw transport_error("write queue full",
-                                      transport_error::Code::write_queue_full);
+                throw transport_error(TransportErrc::write_queue_full);
             if (!write_in_progress_)
                 do_write();
         });
@@ -93,11 +91,14 @@ void Server::run()
             break; // run exited normally
         } catch (packet_error& e) {
             log_warn(logger_, e.what());
-        } catch (std::exception& e) {
+        } catch (asio_error& e) {
             log_error(logger_, e.what());
             close();
             if (error_cb_)
-                error_cb_(std::current_exception());
+                error_cb_(e.code());
+        } catch (std::exception& e) {
+            log_error(logger_, e.what());
+            close();
         }
     }
 }
@@ -135,8 +136,7 @@ void Server::read_payload()
                 try {
                     read_packet_.parse_payload();
                     if (!read_queue_.try_enqueue(read_packet_))
-                        throw transport_error("read queue full",
-                                              transport_error::Code::read_queue_full);
+                        throw transport_error(TransportErrc::read_queue_full);
                 } catch (std::exception& e) {
                     log_error(logger_, "{}", e.what());
                 }

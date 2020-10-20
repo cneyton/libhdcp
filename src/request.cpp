@@ -57,13 +57,14 @@ void RequestManager::send_command(Packet::BlockType type, const std::string& dat
     {
         std::unique_lock<std::mutex> lk(requests_mutex_);
         if (!requests_.insert({id, cmd, std::move(request_cb)}).second)
-            throw hdcp::application_error(fmt::format("a request with the same packet id {} is pending", cmd.id()));
+            throw application_error(ApplicationErrc::request_overrun,
+                                    fmt::format("id {} is pending", cmd.id()));
     }
 }
 
 void RequestManager::send_hip(const Identification& id, std::chrono::milliseconds timeout)
 {
-    if (transport_)
+    if (transport_ && transport_->is_open())
         transport_->write(Packet::make_hip(++packet_id_, id));
     // set timeout
     dip_id_ = timeout_queue_.add(now_, timeout.count()/time_base_ms.count(),
@@ -78,7 +79,7 @@ void RequestManager::start_keepalive_management(std::chrono::milliseconds keepal
         timeout_queue_.add_repeating(now_, keepalive_interval.count()/time_base_ms.count(),
                                      std::bind(&RequestManager::ka_mngt_timeout_cb, this,
                                                std::placeholders::_1, std::placeholders::_2));
-    if (transport_)
+    if (transport_ && transport_->is_open())
         transport_->write(Packet::make_keepalive(++packet_id_));
     // set timeout
     timeout_keepalive_ = keepalive_timeout.count()/time_base_ms.count();
@@ -98,14 +99,15 @@ void RequestManager::ack_command(Packet& packet)
     // and the data should correspond to its packet id
     auto block = packet.blocks().at(0);
     if (block.data.size() != sizeof(Packet::Id))
-        throw hdcp::application_error("first block of cmd ack should contain a packet id");
+        throw application_error(ApplicationErrc::invalid_cmd_ack_format);
     const Packet::Id id = *reinterpret_cast<const Packet::Id*>(block.data.data());
 
     std::unique_lock<std::mutex> lk(requests_mutex_);
     auto& set_by_command = requests_.get<by_command>();
     auto search = set_by_command.find(id);
     if (search == set_by_command.end())
-        throw hdcp::application_error(fmt::format("request with packet id {} not found", id));
+        throw application_error(ApplicationErrc::request_not_found,
+                                fmt::format("id {} not found", id));
     Request r(*search);
     r.set_status(Request::Status::fulfilled);
     r.set_ack(packet);
@@ -131,15 +133,14 @@ void RequestManager::cmd_timeout_cb(common::TimeoutQueue::Id id, int64_t)
     auto& set_by_request = requests_.get<by_request>();
     auto search = set_by_request.find(id);
     if (search == set_by_request.end())
-        throw hdcp::application_error("request id not found, you should not be here");
+        throw hdcp::application_error(ApplicationErrc::request_not_found);
 
     if (search->get_retry() < max_retry_) {
         log_warn(logger_, "command {} timeout, try = {}", search->get_command().id(),
                  search->get_retry());
         set_by_request.modify(search, &inc_retry);
-        if (!transport_)
-            throw hdcp::application_error("transport null pointer");
-        transport_->write(search->get_command());
+        if (transport_ && transport_->is_open())
+            transport_->write(search->get_command());
 
         // reset keepalive mngt
         timeout_queue_.erase(keepalive_mngt_id_);
@@ -174,7 +175,7 @@ void RequestManager::dip_timeout_cb(common::TimeoutQueue::Id, int64_t)
 void RequestManager::ka_mngt_timeout_cb(common::TimeoutQueue::Id, int64_t)
 {
     // send keepalive
-    if (transport_)
+    if (transport_ && transport_->is_open())
         transport_->write(Packet::make_keepalive(++packet_id_));
 
     keepalive_id_ = timeout_queue_.add(now_, timeout_keepalive_,
@@ -239,7 +240,7 @@ void RequestManager::stop()
 
 void RequestManager::send_cmd_ack(const Packet& packet)
 {
-    if (transport_)
+    if (transport_ && transport_->is_open())
         transport_->write(Packet::make_cmd_ack(++packet_id_,
                                                packet.blocks().at(0).type, packet.id()));
 }
@@ -250,8 +251,7 @@ void RequestManager::send_data(std::vector<Packet::BlockView>& blocks)
     size_t payload_size = 0;
     for (auto& b: blocks) {
         if (b.size() > Packet::max_pl_size)
-            throw application_error(fmt::format("a block of size {} is too big to be sent",
-                                                b.size()));
+            throw application_error(ApplicationErrc::data_too_big);
         if (payload_size + b.size() > Packet::max_pl_size) {
             transport_->write(Packet::make_data(++packet_id_, payload));
             payload.clear();
@@ -271,7 +271,7 @@ void RequestManager::send_data(std::vector<Packet::Block>& blocks)
 
 void RequestManager::send_dip(const Identification& id)
 {
-    if (transport_)
+    if (transport_ && transport_->is_open())
         transport_->write(Packet::make_dip(++packet_id_, id));
 }
 
@@ -296,7 +296,7 @@ void RequestManager::keepalive()
                                        std::bind(&RequestManager::ka_timeout_cb, this,
                                                  std::placeholders::_1, std::placeholders::_2));
 
-    if (transport_)
+    if (transport_ && transport_->is_open())
         transport_->write(Packet::make_keepalive_ack(++packet_id_));
 }
 

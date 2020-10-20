@@ -18,7 +18,7 @@ constexpr uint64_t timeout_write = time_base_ms.count();
 class Transport
 {
 public:
-    using ErrorCallback = std::function<void(std::exception_ptr)>;
+    using ErrorCallback = std::function<void(const std::error_code&)>;
 
     Transport(): write_queue_(max_queue_size), read_queue_(max_queue_size) {};
     virtual ~Transport() = default;
@@ -39,7 +39,6 @@ public:
 
 protected:
     ErrorCallback error_cb_;
-    std::exception_ptr eptr_;
 
     common::ConcurrentQueue<Packet>           write_queue_;
     common::BlockingReaderWriterQueue<Packet> read_queue_;

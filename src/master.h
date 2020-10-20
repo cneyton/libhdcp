@@ -15,7 +15,7 @@ class Master: public common::Log, private common::Thread
 {
 public:
     using DataCallback  = std::function<void(const Packet&)>;
-    using ErrorCallback = std::function<void(int)>;
+    using ErrorCallback = std::function<void(const std::error_code&)>;
     enum class State {
         init,
         disconnected,
@@ -26,9 +26,9 @@ public:
     Master(common::Logger logger, const Identification& id, std::unique_ptr<Transport> transport);
     ~Master();
 
-    State get_state() const {return statemachine_.get_state();};
-    const Identification& get_slave_id()  const {return slave_id_;}
-    const Identification& get_master_id() const {return master_id_;}
+    State state() const {return statemachine_.get_state();};
+    const Identification& slave_id()  const {return slave_id_;}
+    const Identification& master_id() const {return master_id_;}
 
     void start();
     void stop() override;
@@ -38,6 +38,7 @@ public:
     const Identification& connect();
     /// Synchronous disconnect
     void disconnect();
+    void async_disconnect(std::function<void>(int));
     /// Send command asynchronously
     void send_command(Packet::BlockType id, const std::string& data, Request::Callback cb);
 
@@ -94,12 +95,13 @@ private:
     DataCallback                  data_cb_;
     ErrorCallback                 error_cb_;
     Packet::Id                    received_packet_id_;
+    std::error_code               errc_;
 
     void run() override;
     void wait_connection_request();
     void set_slave_id(const Packet& p);
     void timeout_cb(master::RequestManager::TimeoutType);
-    void transport_error_cb(std::exception_ptr);
+    void transport_error_cb(const std::error_code&);
     void disconnected_cb();
     void connected_cb();
 };

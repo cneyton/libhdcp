@@ -55,8 +55,7 @@ void Transfer::notify_cancelled()
 RTransfer::RTransfer(libusb_device_handle * device_handle): device_handle_(device_handle)
 {
     if (!device_handle)
-        throw transport_error("device handle nullptr",
-                              transport_error::Code::internal);
+        throw transport_error(TransportErrc::internal);
 
     if (!(buf_ = libusb_dev_mem_alloc(device_handle, Packet::max_size)))
         throw std::bad_alloc();
@@ -158,13 +157,12 @@ void Device::close()
 void Device::write(Packet&& p)
 {
     if (!is_open())
-        throw transport_error("can't write while transport is closed",
-                              transport_error::Code::not_permitted);
+        throw transport_error(TransportErrc::not_permitted);
 
     std::lock_guard<std::mutex> lk(mutex_wprogress_);
     if (wtransfer_->in_progress()) {
         if (!write_queue_.try_enqueue(std::forward<Packet>(p)))
-            throw transport_error("write queue full", transport_error::Code::write_queue_full);
+            throw transport_error(TransportErrc::write_queue_full);
     } else {
         wtransfer_->packet() = std::forward<Packet>(p);
         fill_transfer(wtransfer_);
@@ -175,8 +173,7 @@ void Device::write(Packet&& p)
 void Device::fill_transfer(WTransfer * transfer)
 {
     if (!transfer)
-        throw transport_error("transfer null pointer",
-                              transport_error::Code::internal);
+        throw transport_error(TransportErrc::internal);
 
     libusb_fill_bulk_transfer(transfer->libusb_transfer_ptr(), device_handle_, out_endpoit_,
                               (uint8_t*)transfer->packet().data(), transfer->packet().size(),
@@ -186,8 +183,7 @@ void Device::fill_transfer(WTransfer * transfer)
 void Device::fill_transfer(RTransfer * transfer)
 {
     if (!transfer)
-        throw transport_error("transfer null pointer",
-                              transport_error::Code::internal);
+        throw transport_error(TransportErrc::internal);
 
     libusb_fill_bulk_transfer(transfer->libusb_transfer_ptr(), device_handle_,
                               in_endoint_, transfer->get_buffer(), Packet::max_size,
@@ -251,8 +247,7 @@ void Device::read_cb(libusb_transfer * transfer) noexcept
 
                 if (!usb->read_queue_.try_enqueue(std::string_view((char*)transfer->buffer,
                                                                    transfer->actual_length)))
-                    throw transport_error("read queue full",
-                                          transport_error::Code::read_queue_full);
+                    throw transport_error(TransportErrc::read_queue_full);
                 break;
             }
             case LIBUSB_TRANSFER_CANCELLED:
@@ -291,11 +286,21 @@ void Device::run()
                 std::rethrow_exception(eptr_);
         } catch (packet_error& e) {
             log_warn(logger_, e.what());
-        } catch (std::exception& e) {
+            eptr_ = nullptr;
+        } catch (libusb_error& e) {
             log_error(logger_, e.what());
             if (error_cb_)
-                error_cb_(std::current_exception());
+                error_cb_(e.code());
+            break;
+        } catch (std::exception& e) {
+            log_error(logger_, e.what());
+            break;
         }
+    }
+    try {
+        close();
+    } catch (...) {
+        log_error(logger_, "error while closing device when joining thread");
     }
 }
 

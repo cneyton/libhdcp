@@ -13,7 +13,9 @@ Master::Master(common::Logger logger, const Identification& master_id,
     master_id_(master_id)
 {
     statemachine_.display_trace();
-    transport_->set_error_cb(std::bind(&Master::transport_error_cb, this, std::placeholders::_1));
+    if (transport_)
+        transport_->set_error_cb(std::bind(&Master::transport_error_cb,
+                                           this, std::placeholders::_1));
 }
 
 Master::~Master()
@@ -50,15 +52,15 @@ void Master::stop()
 
 void Master::send_command(Packet::BlockType id, const std::string& data, Request::Callback cb)
 {
-    if (get_state() != State::connected)
-        throw hdcp::application_error("can't send command while disconnected");
+    if (state() != State::connected)
+        throw hdcp::application_error(ApplicationErrc::not_permitted);
 
     request_manager_.send_command(id, data, cb, command_timeout_);
 }
 
 const Identification& Master::connect()
 {
-    if (get_state() == State::connected)
+    if (state() == State::connected)
         return slave_id_;
 
     {
@@ -70,19 +72,25 @@ const Identification& Master::connect()
     }
     std::unique_lock<std::mutex> lk(mutex_connecting_);
     cv_connecting_.wait(lk, [this]{return !connection_requested_ &&
-                                          statemachine_.get_state() != State::connecting;});
-    if (statemachine_.get_state() != State::connected)
-        throw application_error("connection failed");
+                                          state() != State::connecting;});
+    if (state() != State::connected)
+        throw application_error(ApplicationErrc::connection_failed);
     return slave_id_;
 }
 
 void Master::disconnect()
 {
-    if (get_state() == State::disconnected)
+    if (state() == State::disconnected)
         return;
     std::unique_lock<std::mutex> lk(mutex_disconnection_);
     disconnection_requested_ = true;
     cv_disconnection_.wait(lk, [this]{return !disconnection_requested_;});
+}
+
+void Master::async_disconnect(std::function<void>(int))
+{
+    if (state() == State::disconnected)
+        return;
 }
 
 int Master::handler_state_init()
@@ -90,6 +98,7 @@ int Master::handler_state_init()
     connection_requested_    = false;
     dip_received_            = false;
     disconnection_requested_ = false;
+    errc_ = std::error_code();
     notify_running(0);
     return 0;
 }
@@ -98,13 +107,16 @@ int Master::handler_state_disconnected()
 {
     if (statemachine_.get_nb_loop_in_current_state() == 1) {
         slave_id_ = Identification();
-        request_manager_.stop_keepalive_management();
         request_manager_.stop();
         transport_->stop();
         {
             // notify disconnected
             std::unique_lock<std::mutex> lk(mutex_disconnection_);
             disconnection_requested_ = false;
+            if (error_cb_) {
+                if (errc_)
+                    error_cb_(errc_);
+            }
             cv_disconnection_.notify_all();
         }
         {
@@ -218,6 +230,14 @@ void Master::run()
     while (is_running()) {
         try {
             statemachine_.wakeup();
+        } catch (base_transport_error& e) {
+            log_error(logger_, e.what());
+            errc_ = e.code();
+            disconnection_requested_ = true;
+        } catch (application_error& e) {
+            log_error(logger_, e.what());
+            errc_ = e.code();
+            disconnection_requested_ = true;
         } catch (std::exception& e) {
             log_error(logger_, e.what());
             disconnection_requested_ = true;
@@ -258,16 +278,32 @@ void Master::set_slave_id(const Packet& p)
 
 void Master::timeout_cb(master::RequestManager::TimeoutType)
 {
+    std::unique_lock<std::mutex> lk(mutex_disconnection_);
+    errc_ = ApplicationErrc::timeout;
     disconnection_requested_ = true;
 }
 
-void Master::transport_error_cb(std::exception_ptr eptr)
+void Master::connected_cb()
 {
-    try {
-        std::rethrow_exception(eptr);
-    } catch (std::exception& e) {
-        disconnection_requested_ = true;
-    }
+    // notify connection attempt failed
+    std::unique_lock<std::mutex> lk(mutex_connecting_);
+    cv_connecting_.notify_all();
+}
+
+void Master::disconnected_cb()
+{
+    // notify disconnected
+    std::unique_lock<std::mutex> lk(mutex_disconnection_);
+    disconnection_requested_ = false;
+    cv_disconnection_.notify_all();
+}
+
+void Master::transport_error_cb(const std::error_code& errc)
+{
+    if (!errc)
+        return;
+    errc_ = errc;
+    disconnection_requested_ = true;
 }
 
 } /* namespace appli */

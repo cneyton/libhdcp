@@ -15,7 +15,7 @@ class Slave: public common::Log, private common::Thread
 {
 public:
     using CmdCallback   = std::function<void(const Packet::BlockView&)>;
-    using ErrorCallback = std::function<void(int ec)>;
+    using ErrorCallback = std::function<void(const std::error_code&)>;
     enum class State {
         init,
         disconnected,
@@ -27,8 +27,8 @@ public:
     ~Slave();
 
     State state() const {return statemachine_.get_state();};
-    const Identification& get_master_id() const {return master_id_;}
-    const Identification& get_slave_id()  const {return slave_id_;}
+    const Identification& master_id() const {return master_id_;}
+    const Identification& slave_id()  const {return slave_id_;}
 
     void start();
     void stop() override;
@@ -96,12 +96,13 @@ private:
     CmdCallback                   cmd_cb_;
     ErrorCallback                 error_cb_;
     Packet::Id                    received_packet_id_;
+    std::error_code               errc_;
 
     void run() override;
     void wait_connection_request();
     void set_master_id(const Packet& p);
     void timeout_cb();
-    void transport_error_cb(std::exception_ptr);
+    void transport_error_cb(const std::error_code&);
 };
 
 } /* namespace appli  */

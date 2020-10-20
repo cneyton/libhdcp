@@ -12,7 +12,9 @@ Slave::Slave(common::Logger logger, const Identification& id,
     slave_id_(id)
 {
     statemachine_.display_trace();
-    transport_->set_error_cb(std::bind(&Slave::transport_error_cb, this, std::placeholders::_1));
+    if (transport_)
+        transport_->set_error_cb(std::bind(&Slave::transport_error_cb,
+                                           this, std::placeholders::_1));
 }
 
 Slave::~Slave()
@@ -50,7 +52,7 @@ void Slave::stop()
 void Slave::send_data(std::vector<Packet::BlockView>& blocks)
 {
     if (state() != State::connected)
-        throw hdcp::application_error("can't send data while disconnected");
+        throw application_error(ApplicationErrc::not_permitted);
 
     request_manager_.send_data(blocks);
 }
@@ -58,7 +60,7 @@ void Slave::send_data(std::vector<Packet::BlockView>& blocks)
 void Slave::send_data(std::vector<Packet::Block>& blocks)
 {
     if (state() != State::connected)
-        throw hdcp::application_error("can't send data while disconnected");
+        throw application_error(ApplicationErrc::not_permitted);
 
     request_manager_.send_data(blocks);
 }
@@ -81,7 +83,7 @@ const Identification& Slave::connect()
     cv_connecting_.wait(lk, [&]{return !connection_requested_ && state() != State::connecting;});
 
     if (state() != State::connected)
-        throw application_error("connection failed");
+        throw application_error(ApplicationErrc::connection_failed);
     return master_id_;
 }
 
@@ -100,6 +102,7 @@ int Slave::handler_state_init()
     hip_received_            = false;
     ka_received_             = false;
     disconnection_requested_ = false;
+    errc_ = std::error_code();
     notify_running(0);
     return 0;
 }
@@ -115,6 +118,10 @@ int Slave::handler_state_disconnected()
             // notify disconnected
             std::unique_lock<std::mutex> lk(mutex_disconnection_);
             disconnection_requested_ = false;
+            if (error_cb_) {
+                if (errc_)
+                    error_cb_(errc_);
+            }
             cv_disconnection_.notify_all();
         }
         {
@@ -268,6 +275,14 @@ void Slave::run()
     while (is_running()) {
         try {
             statemachine_.wakeup();
+        } catch (base_transport_error& e) {
+            log_error(logger_, e.what());
+            errc_ = e.code();
+            disconnection_requested_ = true;
+        } catch (application_error& e) {
+            log_error(logger_, e.what());
+            errc_ = e.code();
+            disconnection_requested_ = true;
         } catch (std::exception& e) {
             log_error(logger_, e.what());
             disconnection_requested_ = true;
@@ -309,13 +324,12 @@ void Slave::timeout_cb()
     disconnection_requested_ = true;
 }
 
-void Slave::transport_error_cb(std::exception_ptr eptr)
+void Slave::transport_error_cb(const std::error_code& errc)
 {
-    try {
-        std::rethrow_exception(eptr);
-    } catch (std::exception& e) {
-        disconnection_requested_ = true;
-    }
+    if (!errc)
+        return;
+    errc_ = errc;
+    disconnection_requested_ = true;
 }
 
 } /* namespace appli  */

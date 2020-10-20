@@ -7,8 +7,15 @@
 
 using namespace hdcp;
 
-static void cmd_cb(const Packet&)
+common::Logger logger(spdlog::stderr_color_mt("hdcp"));
+
+static void cmd_cb(const Packet::BlockView&)
 {
+}
+
+static void error_cb(const std::error_code& e)
+{
+    log_error(logger, "{}, ({})", e.message(), e.value());
 }
 
 class Cli: public common::Log, public common::Thread
@@ -72,7 +79,7 @@ private:
         std::string usr_in;
 
         std::cout << "--------------------------------------------\n";
-        std::cout << "test " << com_.get_slave_id() << "\n";
+        std::cout << "test " << com_.slave_id() << "\n";
         std::cout << "--------------------------------------------\n";
         std::cout << "Select a command:\n"
             "  0) connect\n"
@@ -144,13 +151,13 @@ int main(int argc, char* argv[])
         std::cerr << "usage: " << argv[0] << " <port>" << std::endl;
         exit(EXIT_FAILURE);
     }
-    common::Logger logger(spdlog::stdout_color_mt("hdcp"));
     logger->set_level(spdlog::level::debug);
 
     Identification id {"server", "NA", "NA", HDCP_VERSION};
     uint16_t port = std::stoi(argv[1]);
     appli::Slave com(logger, id, std::make_unique<transport::tcp::Server>(logger, port));
     com.set_cmd_cb(cmd_cb);
+    com.set_error_cb(error_cb);
 
     Cli cli(logger, com);
 
