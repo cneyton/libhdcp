@@ -83,9 +83,12 @@ void RequestManager::start_keepalive_management(std::chrono::milliseconds keepal
         transport_->write(Packet::make_keepalive(++packet_id_));
     // set timeout
     timeout_keepalive_ = keepalive_timeout.count()/time_base_ms.count();
-    keepalive_id_ = timeout_queue_.add(now_, timeout_keepalive_,
-                                       std::bind(&RequestManager::ka_timeout_cb, this,
-                                                 std::placeholders::_1, std::placeholders::_2));
+    auto id = timeout_queue_.add(now_, timeout_keepalive_,
+                                 std::bind(&RequestManager::ka_timeout_cb, this,
+                                           std::placeholders::_1, std::placeholders::_2));
+    std::unique_lock<std::mutex> lk(mutex_id_);
+    ka_ids_.clear();
+    ka_ids_.push_back(id);
 }
 
 void RequestManager::stop_keepalive_management()
@@ -119,7 +122,10 @@ void RequestManager::ack_command(Packet& packet)
 
 void RequestManager::ack_keepalive()
 {
-    timeout_queue_.erase(keepalive_id_);
+    std::unique_lock<std::mutex> lk(mutex_id_);
+    for (auto id: ka_ids_)
+        timeout_queue_.erase(id);
+    ka_ids_.clear();
 }
 
 void RequestManager::ack_dip()
@@ -178,9 +184,11 @@ void RequestManager::ka_mngt_timeout_cb(common::TimeoutQueue::Id, int64_t)
     if (transport_ && transport_->is_open())
         transport_->write(Packet::make_keepalive(++packet_id_));
 
-    keepalive_id_ = timeout_queue_.add(now_, timeout_keepalive_,
-                                       std::bind(&RequestManager::ka_timeout_cb, this,
-                                                 std::placeholders::_1, std::placeholders::_2));
+    auto id = timeout_queue_.add(now_, timeout_keepalive_,
+                                 std::bind(&RequestManager::ka_timeout_cb, this,
+                                           std::placeholders::_1, std::placeholders::_2));
+    std::unique_lock<std::mutex> lk(mutex_id_);
+    ka_ids_.push_back(id);
 }
 
 void RequestManager::run()

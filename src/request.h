@@ -106,9 +106,10 @@ private:
     std::mutex requests_mutex_;
 
     common::TimeoutQueue     timeout_queue_;
-    common::TimeoutQueue::Id keepalive_id_;
     common::TimeoutQueue::Id keepalive_mngt_id_;
     common::TimeoutQueue::Id dip_id_;
+    std::vector<common::TimeoutQueue::Id> ka_ids_;
+    std::mutex mutex_id_;
 
     int64_t                 now_ = 0;
     std::atomic<Packet::Id> packet_id_ = 0;
