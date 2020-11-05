@@ -268,6 +268,8 @@ void RequestManager::send_data(std::vector<Packet::BlockView>& blocks)
         payload.push_back(b);
         payload_size += b.size();
     }
+    if (payload.size() != 0)
+        transport_->write(Packet::make_data(++packet_id_, payload));
 }
 
 void RequestManager::send_data(std::vector<Packet::Block>& blocks)
