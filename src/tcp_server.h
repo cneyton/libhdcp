@@ -42,6 +42,6 @@ private:
     void run() override;
 };
 
-} /* namespace tcp  */
-} /* namespace transport  */
+} /* namespace tcp */
+} /* namespace transport */
 } /* namespace hdcp */

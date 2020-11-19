@@ -34,11 +34,8 @@ void Server::start()
     if (is_running())
         return;
     log_debug(logger_, "starting transport...");
-    clear_queues();
-    write_in_progress_ = false;
-    open();
-    read_header();
     io_context_.restart();
+    open();
     common::Thread::start(true);
     log_debug(logger_, "transport started");
 }
@@ -48,16 +45,24 @@ void Server::open()
     if (is_open())
         return;
     log_debug(logger_, "opening transport, begin accepting connection...");
-    acceptor_.accept(socket_);
-    log_debug(logger_, "connection accepted, transport opened");
+    acceptor_.async_accept(socket_,
+        [this](const boost::system::error_code& errc)
+        {
+            if (!errc) {
+                log_debug(logger_, "connection accepted, transport opened");
+                read_header();
+            } else {
+                log_debug(logger_, "no connection accepted: {}", errc.message());
+            }
+        });
 }
 
 void Server::close()
 {
-    if (!is_open())
-        return;
     log_debug(logger_, "closing transport...");
-    socket_.shutdown(boost::asio::socket_base::shutdown_type::shutdown_both);
+    if (is_open())
+        socket_.shutdown(boost::asio::socket_base::shutdown_type::shutdown_both);
+    acceptor_.cancel();
     socket_.close();
     log_debug(logger_, "transport closed");
 }
@@ -84,6 +89,8 @@ void Server::write(Packet&& p)
 
 void Server::run()
 {
+    clear_queues();
+    write_in_progress_ = false;
     notify_running(0);
     while (is_running()) {
         try {
@@ -105,6 +112,8 @@ void Server::run()
 
 void Server::read_header()
 {
+    if (!is_open())
+        return;
     auto h = read_packet_.header_view();
     boost::asio::async_read(socket_,
                             boost::asio::buffer(const_cast<char*>(h.data()), h.size()),
@@ -120,6 +129,8 @@ void Server::read_header()
 
 void Server::read_payload()
 {
+    if (!is_open())
+        return;
     try {
         read_packet_.parse_header();
     } catch (hdcp::packet_error& e) {
