@@ -27,6 +27,7 @@ void Slave::start()
     if (is_running())
         return;
     log_debug(logger_, "starting application...");
+    statemachine_.reinit();
     common::Thread::start(true);
     log_debug(logger_, "application started");
 }
@@ -37,15 +38,10 @@ void Slave::stop()
         return;
     log_debug(logger_, "stopping application...");
     common::Thread::stop();
-    {
-        // wake-up in case we were waiting to connect
-        std::unique_lock<std::mutex> lk(mutex_connection_);
-        cv_connection_.notify_all();
-    }
     if (joinable())
         join();
-    request_manager_.stop();
-    transport_->stop();
+    statemachine_.reinit();
+    statemachine_.wakeup();
     log_debug(logger_, "application stopped");
 }
 
@@ -65,44 +61,15 @@ void Slave::send_data(std::vector<Packet::Block>& blocks)
     request_manager_.send_data(blocks);
 }
 
-const Identification& Slave::connect()
-{
-    if (state() == State::connected)
-        return master_id_;
-
-    {
-        // wake-up if we were waiting to connect
-        std::unique_lock<std::mutex> lk(mutex_connection_);
-        disconnection_requested_ = false;
-        connection_requested_ = true;
-        cv_connection_.notify_all();
-    }
-
-    std::unique_lock<std::mutex> lk(mutex_connecting_);
-    transport_->start();
-    cv_connecting_.wait(lk, [&]{return !connection_requested_ && state() != State::connecting;});
-
-    if (state() != State::connected)
-        throw application_error(ApplicationErrc::connection_failed);
-    return master_id_;
-}
-
-void Slave::disconnect()
-{
-    if (state() == State::disconnected)
-        return;
-    std::unique_lock<std::mutex> lk(mutex_disconnection_);
-    disconnection_requested_ = true;
-    cv_disconnection_.wait(lk, [this]{return !disconnection_requested_;});
-}
-
 int Slave::handler_state_init()
 {
-    connection_requested_    = false;
     hip_received_            = false;
     ka_received_             = false;
     disconnection_requested_ = false;
+    master_id_ = Identification();
     errc_ = std::error_code();
+    request_manager_.stop();
+    transport_->stop();
     notify_running(0);
     return 0;
 }
@@ -110,29 +77,9 @@ int Slave::handler_state_init()
 int Slave::handler_state_disconnected()
 {
     if (statemachine_.get_nb_loop_in_current_state() == 1) {
-        master_id_ = Identification();
-        request_manager_.stop_keepalive_management();
-        request_manager_.stop();
-        transport_->stop();
-        {
-            // notify disconnected
-            std::unique_lock<std::mutex> lk(mutex_disconnection_);
-            disconnection_requested_ = false;
-            if (error_cb_) {
-                if (errc_)
-                    error_cb_(errc_);
-            }
-            cv_disconnection_.notify_all();
-        }
-        {
-            // notify connection attempt failed
-            std::unique_lock<std::mutex> lk(mutex_connecting_);
-            cv_connecting_.notify_all();
-        }
-        log_debug(logger_, "waiting connection request...");
-        wait_connection_request();
-        // return here to not wait for packet when stopping
-        return 0;
+        transport_->start();
+        if (status_cb_)
+            status_cb_(State::disconnected, errc_);
     }
 
     Packet p;
@@ -159,7 +106,6 @@ int Slave::handler_state_disconnected()
 int Slave::handler_state_connecting()
 {
     if (statemachine_.get_nb_loop_in_current_state() == 1) {
-        connection_requested_ = false;
         hip_received_ = false;
         request_manager_.start();
         request_manager_.send_dip(slave_id_);
@@ -193,8 +139,8 @@ int Slave::handler_state_connected()
 {
     if (statemachine_.get_nb_loop_in_current_state() == 1) {
         ka_received_ = false;
-        std::unique_lock<std::mutex> lk(mutex_connecting_);
-        cv_connecting_.notify_all();
+        if (status_cb_)
+            status_cb_(State::connected, errc_);
     }
 
     Packet p;
@@ -288,12 +234,6 @@ void Slave::run()
             disconnection_requested_ = true;
         }
     }
-}
-
-void Slave::wait_connection_request()
-{
-    std::unique_lock<std::mutex> lk(mutex_connection_);
-    cv_connection_.wait(lk, [this]{return (connection_requested_ || !is_running());});
 }
 
 void Slave::set_master_id(const Packet& p)
