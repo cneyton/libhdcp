@@ -73,8 +73,8 @@ void WTransfer::submit()
 }
 
 Device::Device(common::Logger logger, int itfc_nb,
-                   uint16_t vendor_id, uint16_t product_id,
-                   uint8_t in_endoint, uint8_t out_endpoint):
+               uint16_t vendor_id, uint16_t product_id,
+               uint8_t in_endoint, uint8_t out_endpoint):
     common::Log(logger), itfc_nb_(itfc_nb), vendor_id_(vendor_id), product_id_(product_id),
     in_endoint_(in_endoint), out_endpoit_(out_endpoint),
     usb_logger_(logger->clone("usb_logger"))
@@ -198,9 +198,8 @@ void Device::write_cb(libusb_transfer * transfer) noexcept
         switch (transfer->status) {
             case LIBUSB_TRANSFER_COMPLETED:
             {
-                log_trace(usb->get_logger(), "write cb: {:#x}",
-                          fmt::join((uint8_t*)transfer->buffer,
-                                    (uint8_t*)transfer->buffer + transfer->actual_length, "|"));
+                log_trace(usb->get_logger(), "write {} bytes", transfer->actual_length);
+
                 std::lock_guard<std::mutex> lk(usb->mutex_wprogress_);
                 if (usb->write_queue_.try_dequeue(usb->wtransfer_->packet())) {
                     usb->fill_transfer(usb->wtransfer_);
@@ -241,9 +240,7 @@ void Device::read_cb(libusb_transfer * transfer) noexcept
                 usb->rtransfer_curr_->submit();
                 usb->rtransfer_prev_ = tmp;
 
-                log_trace(usb->get_logger(), "read cb: {:#x}",
-                          fmt::join((uint8_t*)transfer->buffer,
-                                    (uint8_t*)transfer->buffer + transfer->actual_length, "|"));
+                log_trace(usb->get_logger(), "read {} bytes", transfer->actual_length);
 
                 if (!usb->read_queue_.try_enqueue(std::string_view((char*)transfer->buffer,
                                                                    transfer->actual_length)))
