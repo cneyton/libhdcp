@@ -13,10 +13,24 @@ static void cmd_cb(const Packet::BlockView&)
 {
 }
 
-static void error_cb(const std::error_code& e)
+static void com_status_cb(appli::Slave::State s, const std::error_code& e)
 {
-    log_error(logger, "{}, ({})", e.message(), e.value());
+    switch (s) {
+    case appli::Slave::State::init:
+        log_info(logger, "init: {}", e.message());
+        break;
+    case appli::Slave::State::disconnected:
+        log_info(logger, "disconnected: {}", e.message());
+        break;
+    case appli::Slave::State::connecting:
+        log_info(logger, "connecting: {}", e.message());
+        break;
+    case appli::Slave::State::connected:
+        log_info(logger, "connected: {}", e.message());
+        break;
+    }
 }
+
 
 class Cli: public common::Log, public common::Thread
 {
@@ -32,7 +46,6 @@ public:
 
     void start()
     {
-        com_.start();
         common::Thread::start(0);
     }
 
@@ -82,8 +95,8 @@ private:
         std::cout << "test " << com_.slave_id() << "\n";
         std::cout << "--------------------------------------------\n";
         std::cout << "Select a command:\n"
-            "  0) connect\n"
-            "  1) disconnect\n"
+            "  0) start\n"
+            "  1) stop\n"
             "  2) send data\n"
             "255) EXIT\n"
             ">> ";
@@ -103,27 +116,31 @@ private:
 
         switch (choice) {
         case 0:
-            com_.connect();
+        {
+            com_.start();
             break;
+        }
         case 1:
-            com_.disconnect();
+        {
+            com_.stop();
             break;
+        }
         case 2:
-            {
-                std::vector<hdcp::Packet::Block> blocks = {
-                    {
-                        .type = 0x2854,
-                        .data = std::string(1000, 'a')
-                    }
-                };
-                log_info(logger_, "start sending data...");
-                for (int i=0; i<20000; i++) {
-                    com_.send_data(blocks);
-                    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        {
+            std::vector<hdcp::Packet::Block> blocks = {
+                {
+                    .type = 0x2854,
+                    .data = std::string(1000, 'a')
                 }
-                log_info(logger_, "20000 data sent...");
-                break;
+            };
+            log_info(logger_, "start sending data...");
+            for (int i=0; i<20000; i++) {
+                com_.send_data(blocks);
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
             }
+            log_info(logger_, "20000 data sent...");
+            break;
+        }
         case 255:
             stop();
             break;
@@ -157,7 +174,7 @@ int main(int argc, char* argv[])
     uint16_t port = std::stoi(argv[1]);
     appli::Slave com(logger, id, std::make_unique<transport::tcp::Server>(logger, port));
     com.set_cmd_cb(cmd_cb);
-    com.set_error_cb(error_cb);
+    com.set_status_cb(com_status_cb);
 
     Cli cli(logger, com);
 
