@@ -63,13 +63,13 @@ void Slave::send_data(std::vector<Packet::Block>& blocks)
 
 int Slave::handler_state_init()
 {
+    request_manager_.stop();
+    transport_->stop();
     hip_received_            = false;
     ka_received_             = false;
     disconnection_requested_ = false;
     master_id_ = Identification();
     errc_ = std::error_code();
-    request_manager_.stop();
-    transport_->stop();
     notify_running(0);
     return 0;
 }
@@ -205,7 +205,7 @@ int Slave::check_connection_requested()
 int Slave::check_connected()
 {
     return ka_received_ ? common::statemachine::goto_next_state:
-                           common::statemachine::stay_curr_state;
+                          common::statemachine::stay_curr_state;
 }
 
 int Slave::check_disconnected()
