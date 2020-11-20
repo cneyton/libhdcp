@@ -117,8 +117,9 @@ void Server::read_header()
     auto h = read_packet_.header_view();
     boost::asio::async_read(socket_,
                             boost::asio::buffer(const_cast<char*>(h.data()), h.size()),
-        [this](const boost::system::error_code& ec, size_t)
+        [this](const boost::system::error_code& ec, size_t len)
         {
+            log_trace(logger_, "read {} bytes", len);
             if (!ec) {
                 read_payload();
             } else {
@@ -141,8 +142,9 @@ void Server::read_payload()
     auto pl = read_packet_.payload();
     boost::asio::async_read(socket_,
                             boost::asio::buffer(const_cast<char*>(pl.data()), pl.size()),
-        [this](const boost::system::error_code& ec, size_t)
+        [this](const boost::system::error_code& ec, size_t len)
         {
+            log_trace(logger_, "read {} bytes", len);
             if (!ec) {
                 try {
                     read_packet_.parse_payload();
@@ -165,8 +167,9 @@ void Server::do_write()
     write_in_progress_ = true;
     boost::asio::async_write(socket_,
                              boost::asio::buffer(write_packet_.data(), write_packet_.size()),
-        [this](const boost::system::error_code& ec, size_t)
+        [this](const boost::system::error_code& ec, size_t len)
         {
+            log_trace(logger_, "write {} bytes", len);
             if (!ec) {
                 if (write_queue_.size_approx() > 0)
                     do_write();
