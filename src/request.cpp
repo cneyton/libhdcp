@@ -17,6 +17,7 @@ void RequestManager::start()
         return;
     log_debug(logger_, "starting request manager...");
     clear();
+    keepalive_mngt_ = false;
     common::Thread::start(true);
     log_debug(logger_, "request manager started");
 }
@@ -42,11 +43,13 @@ void RequestManager::send_command(Packet::BlockType type, const std::string& dat
                                                std::placeholders::_1, std::placeholders::_2));
 
     // reset keepalive mngt
-    timeout_queue_.erase(keepalive_mngt_id_);
-    keepalive_mngt_id_ =
-        timeout_queue_.add_repeating(now_, keepalive_interval.count()/time_base_ms.count(),
-                                     std::bind(&RequestManager::ka_mngt_timeout_cb, this,
-                                               std::placeholders::_1, std::placeholders::_2));
+    if (keepalive_mngt_) {
+        timeout_queue_.erase(keepalive_mngt_id_);
+        keepalive_mngt_id_ =
+            timeout_queue_.add_repeating(now_, keepalive_interval.count()/time_base_ms.count(),
+                                         std::bind(&RequestManager::ka_mngt_timeout_cb, this,
+                                                   std::placeholders::_1, std::placeholders::_2));
+    }
 
     // send command
     Packet cmd = Packet::make_command(++packet_id_, type, data);
@@ -75,6 +78,7 @@ void RequestManager::send_hip(const Identification& id, std::chrono::millisecond
 void RequestManager::start_keepalive_management(std::chrono::milliseconds keepalive_interval,
                                                 std::chrono::milliseconds keepalive_timeout)
 {
+    keepalive_mngt_ = true;
     keepalive_mngt_id_ =
         timeout_queue_.add_repeating(now_, keepalive_interval.count()/time_base_ms.count(),
                                      std::bind(&RequestManager::ka_mngt_timeout_cb, this,
@@ -93,6 +97,7 @@ void RequestManager::start_keepalive_management(std::chrono::milliseconds keepal
 
 void RequestManager::stop_keepalive_management()
 {
+    keepalive_mngt_ = false;
     timeout_queue_.erase(keepalive_mngt_id_);
 }
 
@@ -149,11 +154,14 @@ void RequestManager::cmd_timeout_cb(common::TimeoutQueue::Id id, int64_t)
             transport_->write(search->get_command());
 
         // reset keepalive mngt
-        timeout_queue_.erase(keepalive_mngt_id_);
-        keepalive_mngt_id_ =
-            timeout_queue_.add_repeating(now_, keepalive_interval.count()/time_base_ms.count(),
-                                         std::bind(&RequestManager::ka_mngt_timeout_cb, this,
-                                                   std::placeholders::_1, std::placeholders::_2));
+        if (keepalive_mngt_) {
+            timeout_queue_.erase(keepalive_mngt_id_);
+            keepalive_mngt_id_ =
+                timeout_queue_.add_repeating(now_, keepalive_interval.count()/time_base_ms.count(),
+                                             std::bind(&RequestManager::ka_mngt_timeout_cb, this,
+                                                       std::placeholders::_1,
+                                                       std::placeholders::_2));
+        }
     } else {
         log_error(logger_, "command {} failed", search->get_command().id());
         Request r(*search);
@@ -231,6 +239,7 @@ void RequestManager::start()
 
     log_debug(logger_, "starting request manager...");
     clear();
+    keepalive_mngt_ = false;
     common::Thread::start(true);
     log_debug(logger_, "request manager started");
 }
@@ -287,6 +296,7 @@ void RequestManager::send_dip(const Identification& id)
 
 void RequestManager::start_keepalive_management(std::chrono::milliseconds keepalive_timeout)
 {
+    keepalive_mngt_ = true;
     // set timeout
     timeout_keepalive_ = keepalive_timeout.count()/time_base_ms.count();
     keepalive_id_ = timeout_queue_.add(now_, timeout_keepalive_,
@@ -296,15 +306,18 @@ void RequestManager::start_keepalive_management(std::chrono::milliseconds keepal
 
 void RequestManager::stop_keepalive_management()
 {
+    keepalive_mngt_ = false;
     timeout_queue_.erase(keepalive_id_);
 }
 
 void RequestManager::keepalive()
 {
-    timeout_queue_.erase(keepalive_id_);
-    keepalive_id_ = timeout_queue_.add(now_, timeout_keepalive_,
-                                       std::bind(&RequestManager::ka_timeout_cb, this,
-                                                 std::placeholders::_1, std::placeholders::_2));
+    if (keepalive_mngt_) {
+        timeout_queue_.erase(keepalive_id_);
+        keepalive_id_ = timeout_queue_.add(now_, timeout_keepalive_,
+                                           std::bind(&RequestManager::ka_timeout_cb, this,
+                                                     std::placeholders::_1, std::placeholders::_2));
+    }
 
     if (transport_ && transport_->is_open())
         transport_->write(Packet::make_keepalive_ack(++packet_id_));

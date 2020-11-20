@@ -110,6 +110,7 @@ private:
     common::TimeoutQueue::Id dip_id_;
     std::vector<common::TimeoutQueue::Id> ka_ids_;
     std::mutex mutex_id_;
+    bool keepalive_mngt_ = false;
 
     int64_t                 now_ = 0;
     std::atomic<Packet::Id> packet_id_ = 0;
@@ -164,6 +165,8 @@ private:
 
     int64_t                 now_ = 0;
     std::atomic<Packet::Id> packet_id_ = 0;
+
+    bool keepalive_mngt_ = false;
 
     int64_t timeout_keepalive_;
 
