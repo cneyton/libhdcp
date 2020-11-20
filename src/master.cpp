@@ -166,7 +166,7 @@ int Master::handler_state_connected()
 {
     if (statemachine_.get_nb_loop_in_current_state() == 1) {
         dip_received_ = false;
-        request_manager_.start_keepalive_management(keepalive_interval, keepalive_timeout);
+        //request_manager_.start_keepalive_management(keepalive_interval, keepalive_timeout);
         std::unique_lock<std::mutex> lk(mutex_connecting_);
         cv_connecting_.notify_all();
     }
