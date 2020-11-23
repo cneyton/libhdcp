@@ -1,5 +1,5 @@
 cmake_minimum_required (VERSION 3.15)
-project (libhdcp VERSION 0.2.2 LANGUAGES CXX)
+project (libhdcp VERSION 0.3.0 LANGUAGES CXX)
 
 ################################################################################
 # options
