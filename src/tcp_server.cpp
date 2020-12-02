@@ -9,6 +9,7 @@ Server::Server(common::Logger logger, uint16_t port):
     io_context_(), socket_(io_context_),
     acceptor_(io_context_, boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v4(), port))
 {
+    acceptor_.set_option(boost::asio::socket_base::keep_alive(true));
     acceptor_.set_option(boost::asio::ip::tcp::acceptor::reuse_address(true));
 }
 
