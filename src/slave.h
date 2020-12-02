@@ -26,7 +26,7 @@ public:
     Slave(common::Logger logger, const Identification& id, std::unique_ptr<Transport> transport);
     ~Slave();
 
-    State state() const {return statemachine_.get_state();};
+    State state() const {return statemachine_.curr_state();};
     const Identification& master_id() const {return master_id_;}
     const Identification& slave_id()  const {return slave_id_;}
 
@@ -45,37 +45,36 @@ public:
 private:
     using common::Thread::start;
 
-    const common::StatesList<State> states_ {
+    const common::Statemachine<State>::StateList states_ {
         {"init", State::init,
-            {{std::bind(&Slave::handler_state_init, this),         State::init},
-             {std::bind(&Slave::check_true, this),                 State::disconnected}}
+            {{ State::init,         std::bind(&Slave::handler_state_init, this)         },
+             { State::disconnected, std::bind(&Slave::check_true, this)                 }}
         },
         {"disconnected", State::disconnected,
-            {{std::bind(&Slave::handler_state_disconnected, this), State::disconnected},
-             {std::bind(&Slave::check_connection_requested, this), State::connecting}}
+            {{ State::disconnected, std::bind(&Slave::handler_state_disconnected, this) },
+             { State::connecting,   std::bind(&Slave::check_connection_requested, this) }}
         },
         {"connecting", State::connecting,
-            {{std::bind(&Slave::handler_state_connecting, this),   State::connecting},
-             {std::bind(&Slave::check_disconnected, this),         State::init},
-             {std::bind(&Slave::check_connected, this),            State::connected}}
+            {{ State::connecting,   std::bind(&Slave::handler_state_connecting, this)  },
+             { State::init,         std::bind(&Slave::check_disconnected, this)        },
+             { State::connected,    std::bind(&Slave::check_connected, this)           }}
         },
         {"connected", State::connected,
-            {{std::bind(&Slave::handler_state_connected, this),    State::connected},
-             {std::bind(&Slave::check_disconnected, this),         State::init},
-             {std::bind(&Slave::check_connection_requested, this), State::connecting}}
+            {{ State::connected,    std::bind(&Slave::handler_state_connected, this)   },
+             { State::init,         std::bind(&Slave::check_disconnected, this)        },
+             { State::connecting,   std::bind(&Slave::check_connection_requested, this)}}
         }
     };
 
-    int handler_state_init();
-    int handler_state_disconnected();
-    int handler_state_connecting();
-    int handler_state_connected();
+    common::transition_status handler_state_init();
+    common::transition_status handler_state_disconnected();
+    common::transition_status handler_state_connecting();
+    common::transition_status handler_state_connected();
 
-    int check_true();
-    int check_connection_requested();
-    int check_connected();
-    int check_disconnected();
-
+    common::transition_status check_true();
+    common::transition_status check_connection_requested();
+    common::transition_status check_connected();
+    common::transition_status check_disconnected();
 
     // flags
     bool hip_received_ = false;

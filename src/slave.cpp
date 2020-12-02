@@ -6,12 +6,18 @@ namespace appli {
 
 Slave::Slave(common::Logger logger, const Identification& id,
              std::unique_ptr<Transport> transport):
-    common::Log(logger), statemachine_(logger, "com_slave", states_, State::init),
+    common::Log(logger),
+    statemachine_("com_slave", states_, State::init),
     transport_(std::move(transport)),
     request_manager_(logger, transport_.get(), std::bind(&Slave::timeout_cb, this)),
     slave_id_(id)
 {
-    statemachine_.display_trace();
+    statemachine_.set_transition_handler(
+        [this] (const common::Statemachine<State>::State * p,
+                const common::Statemachine<State>::State * c)
+        {
+             log_info(logger_, "slave protocol: {} -> {}", p->name, c->name);
+        });
     if (transport_)
         transport_->set_error_cb(std::bind(&Slave::transport_error_cb,
                                            this, std::placeholders::_1));
@@ -61,7 +67,7 @@ void Slave::send_data(std::vector<Packet::Block>& blocks)
     request_manager_.send_data(blocks);
 }
 
-int Slave::handler_state_init()
+common::transition_status Slave::handler_state_init()
 {
     request_manager_.stop();
     transport_->stop();
@@ -71,12 +77,12 @@ int Slave::handler_state_init()
     master_id_ = Identification();
     errc_ = std::error_code();
     notify_running(0);
-    return 0;
+    return common::transition_status::stay_curr_state;
 }
 
-int Slave::handler_state_disconnected()
+common::transition_status Slave::handler_state_disconnected()
 {
-    if (statemachine_.get_nb_loop_in_current_state() == 1) {
+    if (statemachine_.nb_loop_in_current_state() == 1) {
         transport_->start();
         if (status_cb_)
             status_cb_(State::disconnected, errc_);
@@ -84,7 +90,7 @@ int Slave::handler_state_disconnected()
 
     Packet p;
     if (!transport_->read(p))
-        return 0;
+        return common::transition_status::stay_curr_state;
 
     log_trace(logger_, "{}", p);
     switch (p.type()) {
@@ -100,12 +106,12 @@ int Slave::handler_state_disconnected()
         break;
     }
 
-    return 0;
+    return common::transition_status::stay_curr_state;
 }
 
-int Slave::handler_state_connecting()
+common::transition_status Slave::handler_state_connecting()
 {
-    if (statemachine_.get_nb_loop_in_current_state() == 1) {
+    if (statemachine_.nb_loop_in_current_state() == 1) {
         hip_received_ = false;
         request_manager_.start();
         request_manager_.send_dip(slave_id_);
@@ -114,7 +120,7 @@ int Slave::handler_state_connecting()
 
     Packet p;
     if (!transport_->read(p))
-        return 0;
+        return common::transition_status::stay_curr_state;
 
     log_trace(logger_, "{}", p);
     if (++received_packet_id_ != p.id()) {
@@ -132,12 +138,12 @@ int Slave::handler_state_connecting()
         break;
     }
 
-    return 0;
+    return common::transition_status::stay_curr_state;
 }
 
-int Slave::handler_state_connected()
+common::transition_status Slave::handler_state_connected()
 {
-    if (statemachine_.get_nb_loop_in_current_state() == 1) {
+    if (statemachine_.nb_loop_in_current_state() == 1) {
         ka_received_ = false;
         if (status_cb_)
             status_cb_(State::connected, errc_);
@@ -145,7 +151,7 @@ int Slave::handler_state_connected()
 
     Packet p;
     if (!transport_->read(p))
-        return 0;
+        return common::transition_status::stay_curr_state;
 
     log_trace(logger_, "{}", p);
     if (++received_packet_id_ != p.id()) {
@@ -187,34 +193,34 @@ int Slave::handler_state_connected()
         break;
     }
 
-    return 0;
+    return common::transition_status::stay_curr_state;
 }
 
-int Slave::check_true()
+common::transition_status Slave::check_true()
 {
-    return common::statemachine::goto_next_state;
+    return common::transition_status::goto_next_state;
 }
 
-int Slave::check_connection_requested()
+common::transition_status Slave::check_connection_requested()
 {
     if (hip_received_)
-        return common::statemachine::goto_next_state;
-    return common::statemachine::stay_curr_state;
+        return common::transition_status::goto_next_state;
+    return common::transition_status::stay_curr_state;
 }
 
-int Slave::check_connected()
+common::transition_status Slave::check_connected()
 {
     ka_received_ = true;
-    return ka_received_ ? common::statemachine::goto_next_state:
-                          common::statemachine::stay_curr_state;
+    return ka_received_ ? common::transition_status::goto_next_state:
+                          common::transition_status::stay_curr_state;
 }
 
-int Slave::check_disconnected()
+common::transition_status Slave::check_disconnected()
 {
     if (disconnection_requested_ || !transport_->is_open())
-        return common::statemachine::goto_next_state;
+        return common::transition_status::goto_next_state;
 
-    return common::statemachine::stay_curr_state;
+    return common::transition_status::stay_curr_state;
 }
 
 void Slave::run()

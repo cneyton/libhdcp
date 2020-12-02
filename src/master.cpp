@@ -6,13 +6,19 @@ namespace appli {
 
 Master::Master(common::Logger logger, const Identification& master_id,
                std::unique_ptr<Transport> transport):
-    common::Log(logger), statemachine_(logger, "com_master", states_, State::init),
+    common::Log(logger),
+    statemachine_("com_master", states_, State::init),
     transport_(std::move(transport)),
     request_manager_(logger, transport_.get(),
                      std::bind(&Master::timeout_cb, this, std::placeholders::_1)),
     master_id_(master_id)
 {
-    statemachine_.display_trace();
+    statemachine_.set_transition_handler(
+        [this] (const common::Statemachine<State>::State * p,
+                const common::Statemachine<State>::State * c)
+        {
+             log_info(logger_, "master protocol: {} -> {}", p->name, c->name);
+        });
     if (transport_)
         transport_->set_error_cb(std::bind(&Master::transport_error_cb,
                                            this, std::placeholders::_1));
@@ -93,19 +99,19 @@ void Master::async_disconnect(std::function<void>(int))
         return;
 }
 
-int Master::handler_state_init()
+common::transition_status Master::handler_state_init()
 {
     connection_requested_    = false;
     dip_received_            = false;
     disconnection_requested_ = false;
     errc_ = std::error_code();
     notify_running(0);
-    return 0;
+    return common::transition_status::stay_curr_state;
 }
 
-int Master::handler_state_disconnected()
+common::transition_status Master::handler_state_disconnected()
 {
-    if (statemachine_.get_nb_loop_in_current_state() == 1) {
+    if (statemachine_.nb_loop_in_current_state() == 1) {
         slave_id_ = Identification();
         request_manager_.stop();
         transport_->stop();
@@ -128,12 +134,12 @@ int Master::handler_state_disconnected()
 
     log_debug(logger_, "waiting connection request...");
     wait_connection_request();
-    return 0;
+    return common::transition_status::stay_curr_state;
 }
 
-int Master::handler_state_connecting()
+common::transition_status Master::handler_state_connecting()
 {
-    if (statemachine_.get_nb_loop_in_current_state() == 1) {
+    if (statemachine_.nb_loop_in_current_state() == 1) {
         connection_requested_ = false;
         transport_->start();
         request_manager_.start();
@@ -142,7 +148,7 @@ int Master::handler_state_connecting()
 
     Packet p;
     if (!transport_->read(p))
-        return 0;
+        return common::transition_status::stay_curr_state;
 
     log_trace(logger_, "{}", p);
     switch (p.type()) {
@@ -159,12 +165,12 @@ int Master::handler_state_connecting()
         break;
     }
 
-    return 0;
+    return common::transition_status::stay_curr_state;
 }
 
-int Master::handler_state_connected()
+common::transition_status Master::handler_state_connected()
 {
-    if (statemachine_.get_nb_loop_in_current_state() == 1) {
+    if (statemachine_.nb_loop_in_current_state() == 1) {
         dip_received_ = false;
         //request_manager_.start_keepalive_management(keepalive_interval, keepalive_timeout);
         std::unique_lock<std::mutex> lk(mutex_connecting_);
@@ -173,7 +179,7 @@ int Master::handler_state_connected()
 
     Packet p;
     if (!transport_->read(p))
-        return 0;
+        return common::transition_status::stay_curr_state;
 
     log_trace(logger_, "{}", p);
     if (++received_packet_id_ != p.id()) {
@@ -197,32 +203,32 @@ int Master::handler_state_connected()
         break;
     }
 
-    return 0;
+    return common::transition_status::stay_curr_state;
 }
 
-int Master::check_true()
+common::transition_status Master::check_true()
 {
-    return common::statemachine::goto_next_state;
+    return common::transition_status::goto_next_state;
 }
 
-int Master::check_connection_requested()
+common::transition_status Master::check_connection_requested()
 {
-    return connection_requested_ ? common::statemachine::goto_next_state:
-                                   common::statemachine::stay_curr_state;
+    return connection_requested_ ? common::transition_status::goto_next_state:
+                                   common::transition_status::stay_curr_state;
 }
 
-int Master::check_connected()
+common::transition_status Master::check_connected()
 {
-    return dip_received_ ? common::statemachine::goto_next_state:
-                           common::statemachine::stay_curr_state;
+    return dip_received_ ? common::transition_status::goto_next_state:
+                           common::transition_status::stay_curr_state;
 }
 
-int Master::check_disconnected()
+common::transition_status Master::check_disconnected()
 {
     if (disconnection_requested_ || !transport_->is_open())
-        return common::statemachine::goto_next_state;
+        return common::transition_status::goto_next_state;
 
-    return common::statemachine::stay_curr_state;
+    return common::transition_status::stay_curr_state;
 }
 
 void Master::run()
