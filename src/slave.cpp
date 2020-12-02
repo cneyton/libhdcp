@@ -115,7 +115,7 @@ common::transition_status Slave::handler_state_connecting()
         hip_received_ = false;
         request_manager_.start();
         request_manager_.send_dip(slave_id_);
-        //request_manager_.start_keepalive_management(keepalive_timeout);
+        request_manager_.start_keepalive_management(keepalive_timeout);
     }
 
     Packet p;
@@ -210,7 +210,6 @@ common::transition_status Slave::check_connection_requested()
 
 common::transition_status Slave::check_connected()
 {
-    ka_received_ = true;
     return ka_received_ ? common::transition_status::goto_next_state:
                           common::transition_status::stay_curr_state;
 }
