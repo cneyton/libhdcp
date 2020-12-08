@@ -33,7 +33,9 @@ target_sources(hdcp PRIVATE
     src/packet.cpp
     src/slave.cpp
     src/master.cpp
-    src/error_code.cpp
+    src/transport_error.cpp
+    src/application_error.cpp
+    src/packet_error.cpp
     )
 target_include_directories(hdcp PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include

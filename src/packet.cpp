@@ -1,5 +1,4 @@
 #include "packet.h"
-#include "hdcp/exception.h"
 
 namespace hdcp {
 
@@ -8,14 +7,14 @@ Packet::Packet(std::string_view v)
     // find start of packet
     auto pos = v.find(reinterpret_cast<const char*>(&sop), 0, sizeof(sop));
     if (pos == std::string::npos)
-        throw hdcp::packet_error("sop not found");
+        throw hdcp::packet_error(packet::Errc::sop_not_found);
 
     if (pos + sizeof(Header) > v.size())
-        throw hdcp::packet_error("buffer too small for header");
+        throw hdcp::packet_error(packet::Errc::invalid_buffer_size);
 
     const Header * header = parse_header(std::string_view(v.data() + pos, sizeof(Header)));
     if (pos + sizeof(Header) + header->len > v.size())
-        throw hdcp::packet_error("buffer too small for payload");
+        throw hdcp::packet_error(packet::Errc::invalid_buffer_size);
 
     std::string_view payload(v.data() + pos + sizeof(Header), header->len);
     parse_payload(payload, header);
@@ -172,17 +171,19 @@ std::vector<Packet::BlockView> Packet::blocks(std::string_view payload)
 const Packet::Header * Packet::parse_header(std::string_view v)
 {
     if (v.size() != sizeof(Packet::Header))
-        throw hdcp::packet_error(fmt::format("buffer size != header size: {}", v.size()));
+        throw hdcp::packet_error(packet::Errc::invalid_buffer_size,
+                                 fmt::format("{} != {}", v.size(), sizeof(Packet::Header)));
 
     const Header * h = reinterpret_cast<const Header*>(v.data());
     if (compute_crc(std::string_view(v.data(), v.size()-sizeof(Crc))) != h->h_crc)
-        throw hdcp::packet_error("wrong header crc");
+        throw hdcp::packet_error(packet::Errc::invalid_header_crc);
 
     if (h->sop != sop)
-        throw hdcp::packet_error("sop not at beginning of buffer");
+        throw hdcp::packet_error(packet::Errc::sop_not_found);
 
     if (h->ver != ver)
-        throw hdcp::packet_error(fmt::format("wrong protocol version: {}", h->ver));
+        throw hdcp::packet_error(packet::Errc::invalid_protocol_version,
+                                 fmt::format("{}", h->ver));
 
     switch (h->type) {
     case Packet::Type::hip:
@@ -194,11 +195,13 @@ const Packet::Header * Packet::parse_header(std::string_view v)
     case Packet::Type::data:
         break;
     default:
-        throw hdcp::packet_error(fmt::format("unknown packet type: {:#x}", h->type));
+        throw hdcp::packet_error(packet::Errc::invalid_packet_type,
+                                 fmt::format("{:#x}", h->type));
     }
 
     if (h->len > max_size - sizeof(Header))
-        throw hdcp::packet_error(fmt::format("payload length too big {}", h->len));
+        throw hdcp::packet_error(packet::Errc::payload_exceed_max_size,
+                                 fmt::format("{}", h->len));
 
     return h;
 }
@@ -211,16 +214,16 @@ void Packet::parse_header() const
 void Packet::parse_payload(std::string_view v, const Header * h)
 {
     if (h->len != v.size())
-        throw hdcp::packet_error(fmt::format("wrong payload length: {} should be {}",
-                                             h->len, v.size()));
+        throw hdcp::packet_error(packet::Errc::invalid_buffer_size,
+                                 fmt::format("{} != {}", v.size(), h->len));
 
     if (h->p_crc != compute_crc(v))
-        throw hdcp::packet_error("wrong payload crc");
+        throw hdcp::packet_error(packet::Errc::invalid_payload_crc);
 
     auto b = blocks(v);
     if (h->n_block != b.size())
-        throw hdcp::packet_error(fmt::format("wrong number of blocks: {} should be {}",
-                                 b.size(), h->n_block));
+        throw hdcp::packet_error(packet::Errc::invalid_number_of_block,
+                                 fmt::format("{} should be {}", b.size(), h->n_block));
 }
 
 void Packet::parse_payload() const

@@ -6,6 +6,7 @@
 
 #include "common/log.h"
 
+#include "packet_error.h"
 #include "application.h"
 
 namespace hdcp {

@@ -1,4 +1,3 @@
-#include "hdcp/exception.h"
 #include "usb_async.h"
 
 namespace hdcp {
@@ -55,7 +54,7 @@ void Transfer::notify_cancelled()
 RTransfer::RTransfer(libusb_device_handle * device_handle): device_handle_(device_handle)
 {
     if (!device_handle)
-        throw transport_error(TransportErrc::internal);
+        throw transport_error(Errc::internal);
 
     if (!(buf_ = libusb_dev_mem_alloc(device_handle, Packet::max_size)))
         throw std::bad_alloc();
@@ -157,12 +156,12 @@ void Device::close()
 void Device::write(Packet&& p)
 {
     if (!is_open())
-        throw transport_error(TransportErrc::not_permitted);
+        throw transport_error(Errc::write_while_closed);
 
     std::lock_guard<std::mutex> lk(mutex_wprogress_);
     if (wtransfer_->in_progress()) {
         if (!write_queue_.try_enqueue(std::forward<Packet>(p)))
-            throw transport_error(TransportErrc::write_queue_full);
+            throw transport_error(Errc::write_queue_full);
     } else {
         wtransfer_->packet() = std::forward<Packet>(p);
         fill_transfer(wtransfer_);
@@ -173,7 +172,7 @@ void Device::write(Packet&& p)
 void Device::fill_transfer(WTransfer * transfer)
 {
     if (!transfer)
-        throw transport_error(TransportErrc::internal);
+        throw transport_error(Errc::internal);
 
     libusb_fill_bulk_transfer(transfer->libusb_transfer_ptr(), device_handle_, out_endpoit_,
                               (uint8_t*)transfer->packet().data(), transfer->packet().size(),
@@ -183,7 +182,7 @@ void Device::fill_transfer(WTransfer * transfer)
 void Device::fill_transfer(RTransfer * transfer)
 {
     if (!transfer)
-        throw transport_error(TransportErrc::internal);
+        throw transport_error(Errc::internal);
 
     libusb_fill_bulk_transfer(transfer->libusb_transfer_ptr(), device_handle_,
                               in_endoint_, transfer->get_buffer(), Packet::max_size,
@@ -244,7 +243,7 @@ void Device::read_cb(libusb_transfer * transfer) noexcept
 
                 if (!usb->read_queue_.try_enqueue(std::string_view((char*)transfer->buffer,
                                                                    transfer->actual_length)))
-                    throw transport_error(TransportErrc::read_queue_full);
+                    throw transport_error(Errc::read_queue_full);
                 break;
             }
             case LIBUSB_TRANSFER_CANCELLED:

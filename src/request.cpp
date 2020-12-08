@@ -1,4 +1,4 @@
-#include "hdcp/exception.h"
+#include "application_error.h"
 #include "request.h"
 
 namespace hdcp {
@@ -60,7 +60,7 @@ void RequestManager::send_command(Packet::BlockType type, const std::string& dat
     {
         std::unique_lock<std::mutex> lk(requests_mutex_);
         if (!requests_.insert({id, cmd, std::move(request_cb)}).second)
-            throw application_error(ApplicationErrc::request_overrun,
+            throw application_error(appli::Errc::request_overrun,
                                     fmt::format("id {} is pending", cmd.id()));
     }
 }
@@ -107,14 +107,14 @@ void RequestManager::ack_command(Packet& packet)
     // and the data should correspond to its packet id
     auto block = packet.blocks().at(0);
     if (block.data.size() != sizeof(Packet::Id))
-        throw application_error(ApplicationErrc::invalid_cmd_ack_format);
+        throw application_error(appli::Errc::invalid_cmd_ack_format);
     const Packet::Id id = *reinterpret_cast<const Packet::Id*>(block.data.data());
 
     std::unique_lock<std::mutex> lk(requests_mutex_);
     auto& set_by_command = requests_.get<by_command>();
     auto search = set_by_command.find(id);
     if (search == set_by_command.end())
-        throw application_error(ApplicationErrc::request_not_found,
+        throw application_error(appli::Errc::request_not_found,
                                 fmt::format("id {} not found", id));
     Request r(*search);
     r.set_status(Request::Status::fulfilled);
@@ -144,7 +144,7 @@ void RequestManager::cmd_timeout_cb(common::TimeoutQueue::Id id, int64_t)
     auto& set_by_request = requests_.get<by_request>();
     auto search = set_by_request.find(id);
     if (search == set_by_request.end())
-        throw hdcp::application_error(ApplicationErrc::request_not_found);
+        throw hdcp::application_error(appli::Errc::request_not_found);
 
     if (search->get_retry() < max_retry_) {
         log_warn(logger_, "command {} timeout, try = {}", search->get_command().id(),
@@ -268,7 +268,7 @@ void RequestManager::send_data(std::vector<Packet::BlockView>& blocks)
     size_t payload_size = 0;
     for (auto& b: blocks) {
         if (b.size() > Packet::max_pl_size)
-            throw application_error(ApplicationErrc::data_too_big);
+            throw application_error(appli::Errc::data_too_big);
         if (payload_size + b.size() > Packet::max_pl_size) {
             transport_->write(Packet::make_data(++packet_id_, payload));
             payload.clear();

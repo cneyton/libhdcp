@@ -1,12 +1,11 @@
 #pragma once
 
 #include <chrono>
-#include <string>
-#include <bitset>
 
 #include "common/readerwriterqueue.h"
 #include "common/concurrentqueue.h"
 
+#include "transport_error.h"
 #include "packet.h"
 
 namespace hdcp {
