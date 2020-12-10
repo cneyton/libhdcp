@@ -35,13 +35,8 @@ public:
     void stop() override;
     void set_data_cb(DataCallback&& cb)     {data_cb_   = std::forward<DataCallback>(cb);}
     void set_status_cb(StatusCallback&& cb) {status_cb_ = std::forward<StatusCallback>(cb);}
-    /// Synchronous connect
-    const Identification& connect();
     void async_connect();
-    /// Synchronous disconnect
-    void disconnect();
     void async_disconnect();
-    /// Send command asynchronously
     void send_command(Packet::BlockType id, const std::string& data, Request::Callback cb);
 
 private:

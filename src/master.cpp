@@ -63,21 +63,12 @@ void Master::send_command(Packet::BlockType id, const std::string& data, Request
     request_manager_.send_command(id, data, cb, command_timeout_);
 }
 
-const Identification& Master::connect()
-{
-    return slave_id_;
-}
-
 void Master::async_connect()
 {
     if (state() == State::connected)
         return;
 
     evt_mngr_.notify(Event::connection_requested);
-}
-
-void Master::disconnect()
-{
 }
 
 void Master::async_disconnect()
