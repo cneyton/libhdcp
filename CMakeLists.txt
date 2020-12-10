@@ -29,7 +29,8 @@ target_sources(hdcp PRIVATE
     src/usb_async.cpp
     src/tcp_server.cpp
     src/tcp_client.cpp
-    src/request.cpp
+    src/slave_request.cpp
+    src/master_request.cpp
     src/packet.cpp
     src/slave.cpp
     src/master.cpp
