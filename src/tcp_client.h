@@ -3,7 +3,6 @@
 #include "common/thread.h"
 
 #include "transport.h"
-#include "hdcp/exception.h"
 
 namespace hdcp {
 namespace transport {
@@ -16,8 +15,8 @@ public:
     ~Client();
 
     void write(Packet&& p) override;
-    void stop()    override;
     void start()   override;
+    void stop()    override;
     bool is_open() override;
     void open()    override;
     void close()   override;

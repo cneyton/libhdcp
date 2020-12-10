@@ -3,8 +3,9 @@
 #include "common/log.h"
 #include "common/statemachine.h"
 #include "common/thread.h"
+#include "common/event_mngr.h"
 
-#include "request.h"
+#include "master_request.h"
 #include "transport.h"
 #include "application.h"
 
@@ -14,14 +15,14 @@ namespace appli {
 class Master: public common::Log, private common::Thread
 {
 public:
-    using DataCallback  = std::function<void(const Packet&)>;
-    using ErrorCallback = std::function<void(const std::error_code&)>;
     enum class State {
         init,
         disconnected,
         connecting,
         connected
     };
+    using DataCallback   = std::function<void(const Packet&)>;
+    using StatusCallback = std::function<void(State, const std::error_code&)>;
 
     Master(common::Logger logger, const Identification& id, std::unique_ptr<Transport> transport);
     ~Master();
@@ -32,13 +33,14 @@ public:
 
     void start();
     void stop() override;
-    void set_data_cb(DataCallback&& cb)   {data_cb_  = std::forward<DataCallback>(cb);}
-    void set_error_cb(ErrorCallback&& cb) {error_cb_ = std::forward<ErrorCallback>(cb);}
+    void set_data_cb(DataCallback&& cb)     {data_cb_   = std::forward<DataCallback>(cb);}
+    void set_status_cb(StatusCallback&& cb) {status_cb_ = std::forward<StatusCallback>(cb);}
     /// Synchronous connect
     const Identification& connect();
+    void async_connect();
     /// Synchronous disconnect
     void disconnect();
-    void async_disconnect(std::function<void>(int));
+    void async_disconnect();
     /// Send command asynchronously
     void send_command(Packet::BlockType id, const std::string& data, Request::Callback cb);
 
@@ -52,15 +54,19 @@ private:
         },
         {"disconnected", State::disconnected,
             {{ State::disconnected, std::bind(&Master::handler_state_disconnected, this) },
+             { State::disconnected, std::bind(&Master::check_transport_closed, this)     },
              { State::connecting,   std::bind(&Master::check_connection_requested, this) }}
         },
         {"connecting", State::connecting,
             {{ State::connecting,   std::bind(&Master::handler_state_connecting, this)   },
-             { State::disconnected, std::bind(&Master::check_disconnected, this)         },
+             { State::disconnected, std::bind(&Master::check_transport_closed, this)     },
+             { State::disconnected, std::bind(&Master::check_dip_timeout, this)          },
              { State::connected,    std::bind(&Master::check_connected, this)            }}
         },
         {"connected", State::connected,
             {{ State::connected,    std::bind(&Master::handler_state_connected, this)    },
+             { State::disconnected, std::bind(&Master::check_transport_closed, this)     },
+             { State::disconnected, std::bind(&Master::check_ka_timeout, this)           },
              { State::disconnected, std::bind(&Master::check_disconnected, this)         }}
         }
     };
@@ -74,37 +80,36 @@ private:
     common::transition_status check_connection_requested();
     common::transition_status check_connected();
     common::transition_status check_disconnected();
+    common::transition_status check_dip_timeout();
+    common::transition_status check_ka_timeout();
+    common::transition_status check_transport_closed();
 
-
-    // flags
-    std::atomic_bool connection_requested_    = false;
-    std::atomic_bool dip_received_            = false;
-    std::atomic_bool disconnection_requested_ = false;
-
-    std::mutex              mutex_disconnection_;
-    std::condition_variable cv_disconnection_;
-    std::mutex              mutex_connection_;
-    std::condition_variable cv_connection_;
-    std::mutex              mutex_connecting_;
-    std::condition_variable cv_connecting_;
+    enum class Event {
+        connection_requested,
+        disconnection_requested,
+        dip_received,
+        dip_timeout,
+        ka_timeout,
+        stop
+    };
+    common::EventMngr<Event> evt_mngr_;
 
     common::Statemachine<State>   statemachine_;
+
     std::unique_ptr<Transport>    transport_;
     master::RequestManager        request_manager_;
     Identification                master_id_;
     Identification                slave_id_;
-    DataCallback                  data_cb_;
-    ErrorCallback                 error_cb_;
     Packet::Id                    received_packet_id_;
+    uint                          connection_attempts_;
+
+    DataCallback                  data_cb_;
+    StatusCallback                status_cb_;
     std::error_code               errc_;
 
     void run() override;
-    void wait_connection_request();
     void set_slave_id(const Packet& p);
     void timeout_cb(master::RequestManager::TimeoutType);
-    void transport_error_cb(const std::error_code&);
-    void disconnected_cb();
-    void connected_cb();
 };
 
 } /* namespace appli  */

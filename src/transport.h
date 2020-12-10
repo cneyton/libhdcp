@@ -17,17 +17,23 @@ constexpr uint64_t timeout_write = time_base_ms.count();
 class Transport
 {
 public:
-    using ErrorCallback = std::function<void(const std::error_code&)>;
-
     Transport(): write_queue_(max_queue_size), read_queue_(max_queue_size) {};
     virtual ~Transport() = default;
 
-    void set_error_cb(ErrorCallback&& cb) {error_cb_ = std::forward<ErrorCallback>(cb);}
     void write(const Packet& p) {write(Packet(p));}
     bool read(Packet& p)
     {
         return read_queue_.wait_dequeue_timed(p, time_base_ms);
     }
+
+    void clear_queues()
+    {
+        while (read_queue_.pop()) {}
+        Packet p;
+        while (write_queue_.try_dequeue(p)) {}
+    }
+
+    const std::error_code& error_code() const {return errc_;}
 
     virtual void write(Packet&&) = 0;
     virtual void start()   = 0;
@@ -37,23 +43,16 @@ public:
     virtual void close()   = 0;
 
 protected:
-    ErrorCallback error_cb_;
+    std::error_code errc_;
 
     common::ConcurrentQueue<Packet>           write_queue_;
     common::BlockingReaderWriterQueue<Packet> read_queue_;
 
-    void clear_queues()
-    {
-        while (read_queue_.pop()) {}
-        Packet p;
-        while (write_queue_.try_dequeue(p)) {}
-    }
-
 private:
-    static constexpr std::size_t max_queue_size = 100;
+    static constexpr size_t max_queue_size = 100;
 
     // disable copy ctor, copy assignment, move ctor & move assignment
-    /* TODO: enable move <30-09-20, cneyton> */
+    /* TODO: enable move ? <30-09-20, cneyton> */
     Transport(const Transport&)            = delete;
     Transport& operator=(const Transport&) = delete;
     Transport(Transport&&)                 = delete;

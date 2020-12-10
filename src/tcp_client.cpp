@@ -6,7 +6,8 @@ namespace tcp {
 
 Client::Client(common::Logger logger, std::string_view host, std::string_view service):
     Log(logger),
-    io_context_(), socket_(io_context_), host_(host), service_(service)
+    io_context_(), socket_(io_context_),
+    host_(host), service_(service)
 {
 }
 
@@ -18,17 +19,28 @@ Client::~Client()
 void Client::write(Packet&& p)
 {
     if (!is_open())
-        throw transport_error(TransportErrc::not_permitted);
+        throw transport_error(Errc::write_while_closed);
 
     boost::asio::post(io_context_,
         [this, p] ()
         {
             if (!write_queue_.try_enqueue(p))
-                throw transport_error(TransportErrc::write_queue_full);
+                throw transport_error(Errc::write_queue_full);
             if (!write_in_progress_)
                 do_write();
         });
 }
+
+void Client::start()
+{
+    if (is_running())
+        return;
+    log_debug(logger_, "starting transport...");
+    write_in_progress_ = false;
+    open();
+    common::Thread::start(true);
+    log_debug(logger_, "transport started");
+};
 
 void Client::stop()
 {
@@ -41,20 +53,6 @@ void Client::stop()
         join();
     log_debug(logger_, "transport stopped");
 }
-
-void Client::start()
-{
-    if (is_running())
-        return;
-    log_debug(logger_, "starting transport...");
-    clear_queues();
-    write_in_progress_ = false;
-    open();
-    read_header();
-    io_context_.restart();
-    common::Thread::start(true);
-    log_debug(logger_, "transport started");
-};
 
 void Client::open()
 {
@@ -84,22 +82,31 @@ bool Client::is_open()
 
 void Client::run()
 {
-    notify_running(0);
-    while (is_running()) {
-        try {
-            io_context_.run();
-            break; // run exited normally
-        } catch (packet_error& e) {
-            log_warn(logger_, e.what());
-        } catch (asio_error& e) {
-            log_error(logger_, e.what());
-            close();
-            if (error_cb_)
-                error_cb_(e.code());
-        } catch (std::exception& e) {
-            log_error(logger_, e.what());
-            close();
+    try {
+        io_context_.restart();
+        read_header();
+        notify_running();
+        while (is_running()) {
+            try {
+                io_context_.run();
+                break; // run exited normally
+            } catch (packet_error& e) {
+                // discard ill-formed packets
+                log_warn(logger_, e.what());
+                read_header();
+            } catch (std::exception& e) {
+                log_error(logger_, e.what());
+                close();
+                break;
+            } catch (...) {
+                close();
+                break;
+            }
         }
+    } catch (std::exception& e) {
+        log_error(logger_, e.what());
+    } catch (...) {
+        log_error(logger_, "error during thread execution");
     }
 }
 
@@ -110,8 +117,15 @@ void Client::read_header()
                             boost::asio::buffer(const_cast<char*>(h.data()), h.size()),
         [this](const boost::system::error_code& ec, size_t)
         {
+            errc_ = ec;
             if (!ec) {
                 read_payload();
+            } else if (ec == boost::asio::error::operation_aborted) {
+                log_warn(logger_, "{}", ec.message());
+            } else if (ec == boost::asio::error::eof) {
+                log_info(logger_, "{}", ec.message());
+                close();
+                errc_ = ec;
             } else {
                 throw asio_error(ec);
             }
@@ -120,28 +134,27 @@ void Client::read_header()
 
 void Client::read_payload()
 {
-    try {
-        read_packet_.parse_header();
-    } catch (hdcp::packet_error& e) {
-        log_error(logger_, "{}", e.what());
-        read_header();
-        return;
-    }
+    read_packet_.parse_header();
 
     auto pl = read_packet_.payload();
     boost::asio::async_read(socket_,
                             boost::asio::buffer(const_cast<char*>(pl.data()), pl.size()),
         [this](const boost::system::error_code& ec, size_t)
         {
+            errc_ = ec;
             if (!ec) {
-                try {
-                    read_packet_.parse_payload();
-                    if (!read_queue_.try_enqueue(read_packet_))
-                        throw transport_error(TransportErrc::read_queue_full);
-                } catch (std::exception& e) {
-                    log_error(logger_, "{}", e.what());
+                read_packet_.parse_payload();
+                if (!read_queue_.try_enqueue(read_packet_)) {
+                    // discard packet if queue is full
+                    auto e = make_error_code(Errc::read_queue_full);
+                    log_warn(logger_, e.message());
                 }
                 read_header();
+            } else if (ec == boost::asio::error::operation_aborted) {
+                log_warn(logger_, "{}", ec.message());
+            } else if (ec == boost::asio::error::eof) {
+                log_info(logger_, "{}", ec.message());
+                close();
             } else {
                 throw asio_error(ec);
             }
@@ -157,11 +170,17 @@ void Client::do_write()
                              boost::asio::buffer(write_packet_.data(), write_packet_.size()),
         [this](const boost::system::error_code& ec, size_t)
         {
+            errc_ = ec;
             if (!ec) {
                 if (write_queue_.size_approx() > 0)
                     do_write();
                 else
                     write_in_progress_ = false;
+            } else if (ec == boost::asio::error::operation_aborted) {
+                log_warn(logger_, "{}", ec.message());
+            } else if (ec == boost::asio::error::eof) {
+                log_info(logger_, "{}", ec.message());
+                close();
             } else {
                 throw asio_error(ec);
             }

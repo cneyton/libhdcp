@@ -1,5 +1,5 @@
 #include "master.h"
-#include "hdcp/exception.h"
+#include "application_error.h"
 
 namespace hdcp {
 namespace appli {
@@ -17,11 +17,12 @@ Master::Master(common::Logger logger, const Identification& master_id,
         [this] (const common::Statemachine<State>::State * p,
                 const common::Statemachine<State>::State * c)
         {
-             log_info(logger_, "master protocol: {} -> {}", p->name, c->name);
+            log_info(logger_, "master protocol: {} -> {}", p->name, c->name);
+            if (status_cb_)
+                 status_cb_(c->id, errc_);
+            // reset error code once it has been sent
+            errc_ = std::error_code();
         });
-    if (transport_)
-        transport_->set_error_cb(std::bind(&Master::transport_error_cb,
-                                           this, std::placeholders::_1));
 }
 
 Master::~Master()
@@ -34,6 +35,8 @@ void Master::start()
     if (is_running())
         return;
     log_debug(logger_, "starting application...");
+    transport_->start();
+    statemachine_.reinit();
     common::Thread::start(true);
     log_debug(logger_, "application started");
 }
@@ -44,11 +47,7 @@ void Master::stop()
         return;
     log_debug(logger_, "stopping application...");
     common::Thread::stop();
-    {
-        // wake-up in case we were waiting to connect
-        std::unique_lock<std::mutex> lk(mutex_connection_);
-        cv_connection_.notify_all();
-    }
+    evt_mngr_.notify(Event::stop);
     if (joinable())
         join();
     request_manager_.stop();
@@ -59,53 +58,40 @@ void Master::stop()
 void Master::send_command(Packet::BlockType id, const std::string& data, Request::Callback cb)
 {
     if (state() != State::connected)
-        throw hdcp::application_error(ApplicationErrc::not_permitted);
+        throw hdcp::application_error(Errc::write_while_disconnected);
 
     request_manager_.send_command(id, data, cb, command_timeout_);
 }
 
 const Identification& Master::connect()
 {
-    if (state() == State::connected)
-        return slave_id_;
-
-    {
-        // wake-up if we were waiting to connect
-        std::unique_lock<std::mutex> lk(mutex_connection_);
-        disconnection_requested_ = false;
-        connection_requested_ = true;
-        cv_connection_.notify_all();
-    }
-    std::unique_lock<std::mutex> lk(mutex_connecting_);
-    cv_connecting_.wait(lk, [this]{return !connection_requested_ &&
-                                          state() != State::connecting;});
-    if (state() != State::connected)
-        throw application_error(ApplicationErrc::connection_failed);
     return slave_id_;
+}
+
+void Master::async_connect()
+{
+    if (state() == State::connected)
+        return;
+
+    evt_mngr_.notify(Event::connection_requested);
 }
 
 void Master::disconnect()
 {
-    if (state() == State::disconnected)
-        return;
-    std::unique_lock<std::mutex> lk(mutex_disconnection_);
-    disconnection_requested_ = true;
-    cv_disconnection_.wait(lk, [this]{return !disconnection_requested_;});
 }
 
-void Master::async_disconnect(std::function<void>(int))
+void Master::async_disconnect()
 {
     if (state() == State::disconnected)
         return;
+
+    evt_mngr_.notify(Event::disconnection_requested);
 }
 
 common::transition_status Master::handler_state_init()
 {
-    connection_requested_    = false;
-    dip_received_            = false;
-    disconnection_requested_ = false;
     errc_ = std::error_code();
-    notify_running(0);
+    notify_running();
     return common::transition_status::stay_curr_state;
 }
 
@@ -114,35 +100,26 @@ common::transition_status Master::handler_state_disconnected()
     if (statemachine_.nb_loop_in_current_state() == 1) {
         slave_id_ = Identification();
         request_manager_.stop();
-        transport_->stop();
-        {
-            // notify disconnected
-            std::unique_lock<std::mutex> lk(mutex_disconnection_);
-            disconnection_requested_ = false;
-            if (error_cb_) {
-                if (errc_)
-                    error_cb_(errc_);
-            }
-            cv_disconnection_.notify_all();
-        }
-        {
-            // notify connection attempt failed
-            std::unique_lock<std::mutex> lk(mutex_connecting_);
-            cv_connecting_.notify_all();
-        }
     }
 
-    log_debug(logger_, "waiting connection request...");
-    wait_connection_request();
+    log_debug(logger_, "waiting for event...");
+    evt_mngr_.clear();
+    evt_mngr_.wait();
     return common::transition_status::stay_curr_state;
 }
 
 common::transition_status Master::handler_state_connecting()
 {
     if (statemachine_.nb_loop_in_current_state() == 1) {
-        connection_requested_ = false;
-        transport_->start();
+        transport_->clear_queues();
         request_manager_.start();
+        evt_mngr_.erase(Event::dip_received);
+        connection_attempts_ = 0;
+    }
+
+    if (connection_attempts_== 0 || evt_mngr_.erase(Event::dip_timeout)) {
+        connection_attempts_++;
+        log_info(logger_, "connection attempt {}", connection_attempts_);
         request_manager_.send_hip(master_id_, connecting_timeout_);
     }
 
@@ -154,11 +131,11 @@ common::transition_status Master::handler_state_connecting()
     switch (p.type()) {
     case Packet::Type::dip:
         if (p.id() != 1)
-            log_warn(logger_, "dip id should be 0");
+            log_warn(logger_, "dip id should be 1");
         received_packet_id_ = p.id();
         set_slave_id(p);
-        dip_received_ = true;
         request_manager_.ack_dip();
+        evt_mngr_.notify(Event::dip_received);
         break;
     default:
         log_warn(logger_, "you should only receive dip in connecting state");
@@ -171,10 +148,7 @@ common::transition_status Master::handler_state_connecting()
 common::transition_status Master::handler_state_connected()
 {
     if (statemachine_.nb_loop_in_current_state() == 1) {
-        dip_received_ = false;
         request_manager_.start_keepalive_management(keepalive_interval, keepalive_timeout);
-        std::unique_lock<std::mutex> lk(mutex_connecting_);
-        cv_connecting_.notify_all();
     }
 
     Packet p;
@@ -213,21 +187,53 @@ common::transition_status Master::check_true()
 
 common::transition_status Master::check_connection_requested()
 {
-    return connection_requested_ ? common::transition_status::goto_next_state:
-                                   common::transition_status::stay_curr_state;
+    if (evt_mngr_.erase(Event::connection_requested))
+        return common::transition_status::goto_next_state;
+    return common::transition_status::stay_curr_state;
 }
 
 common::transition_status Master::check_connected()
 {
-    return dip_received_ ? common::transition_status::goto_next_state:
-                           common::transition_status::stay_curr_state;
+    if (evt_mngr_.erase(Event::dip_received))
+        return common::transition_status::goto_next_state;
+    return common::transition_status::stay_curr_state;
 }
 
 common::transition_status Master::check_disconnected()
 {
-    if (disconnection_requested_ || !transport_->is_open())
+    if (evt_mngr_.erase(Event::disconnection_requested))
         return common::transition_status::goto_next_state;
 
+    return common::transition_status::stay_curr_state;
+}
+
+common::transition_status Master::check_dip_timeout()
+{
+    if (evt_mngr_.contains(Event::dip_timeout) &&
+        connection_attempts_ >= max_connection_attempts) {
+        evt_mngr_.erase(Event::dip_timeout);
+        errc_ = Errc::dip_timeout;
+        return common::transition_status::goto_next_state;
+    }
+    return common::transition_status::stay_curr_state;
+}
+
+common::transition_status Master::check_ka_timeout()
+{
+    if (evt_mngr_.erase(Event::ka_timeout)) {
+        errc_ = Errc::ka_timeout;
+        return common::transition_status::goto_next_state;
+    }
+
+    return common::transition_status::stay_curr_state;
+}
+
+common::transition_status Master::check_transport_closed()
+{
+    if (!transport_->is_open()) {
+        errc_ = transport_->error_code();
+        return common::transition_status::goto_next_state;
+    }
     return common::transition_status::stay_curr_state;
 }
 
@@ -236,25 +242,15 @@ void Master::run()
     while (is_running()) {
         try {
             statemachine_.wakeup();
-        } catch (base_transport_error& e) {
+        } catch (hdcp_error& e) {
             log_error(logger_, e.what());
             errc_ = e.code();
-            disconnection_requested_ = true;
-        } catch (application_error& e) {
-            log_error(logger_, e.what());
-            errc_ = e.code();
-            disconnection_requested_ = true;
         } catch (std::exception& e) {
             log_error(logger_, e.what());
-            disconnection_requested_ = true;
+        } catch (...) {
+            log_error(logger_, "error during thread execution");
         }
     }
-}
-
-void Master::wait_connection_request()
-{
-    std::unique_lock<std::mutex> lk(mutex_connection_);
-    cv_connection_.wait(lk, [this]{return (connection_requested_ || !is_running());});
 }
 
 void Master::set_slave_id(const Packet& p)
@@ -282,34 +278,16 @@ void Master::set_slave_id(const Packet& p)
     log_debug(logger_, "device {}", slave_id_);
 }
 
-void Master::timeout_cb(master::RequestManager::TimeoutType)
+void Master::timeout_cb(master::RequestManager::TimeoutType timeout_type)
 {
-    std::unique_lock<std::mutex> lk(mutex_disconnection_);
-    errc_ = ApplicationErrc::timeout;
-    disconnection_requested_ = true;
-}
-
-void Master::connected_cb()
-{
-    // notify connection attempt failed
-    std::unique_lock<std::mutex> lk(mutex_connecting_);
-    cv_connecting_.notify_all();
-}
-
-void Master::disconnected_cb()
-{
-    // notify disconnected
-    std::unique_lock<std::mutex> lk(mutex_disconnection_);
-    disconnection_requested_ = false;
-    cv_disconnection_.notify_all();
-}
-
-void Master::transport_error_cb(const std::error_code& errc)
-{
-    if (!errc)
-        return;
-    errc_ = errc;
-    disconnection_requested_ = true;
+    switch (timeout_type) {
+    case master::RequestManager::TimeoutType::ka_timeout:
+        evt_mngr_.notify(Event::ka_timeout);
+        break;
+    case master::RequestManager::TimeoutType::dip_timeout:
+        evt_mngr_.notify(Event::dip_timeout);
+        break;
+    }
 }
 
 } /* namespace appli */

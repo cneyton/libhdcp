@@ -3,8 +3,9 @@
 #include "common/log.h"
 #include "common/statemachine.h"
 #include "common/thread.h"
+#include "common/event_mngr.h"
 
-#include "request.h"
+#include "slave_request.h"
 #include "transport.h"
 #include "application.h"
 
@@ -14,13 +15,13 @@ namespace appli {
 class Slave: public common::Log, private common::Thread
 {
 public:
-    using CmdCallback   = std::function<void(const Packet::BlockView&)>;
     enum class State {
         init,
         disconnected,
         connecting,
         connected
     };
+    using CmdCallback    = std::function<void(const Packet::BlockView&)>;
     using StatusCallback = std::function<void(State, const std::error_code&)>;
 
     Slave(common::Logger logger, const Identification& id, std::unique_ptr<Transport> transport);
@@ -34,10 +35,6 @@ public:
     void stop() override;
     void set_cmd_cb(CmdCallback&& cb)       {cmd_cb_   = std::forward<CmdCallback>(cb);}
     void set_status_cb(StatusCallback&& cb) {status_cb_ = std::forward<StatusCallback>(cb);}
-    /// Synchronous connect
-    const Identification& connect();
-    /// Synchronous disconnect
-    void disconnect();
 
     void send_data(std::vector<Packet::BlockView>&);
     void send_data(std::vector<Packet::Block>&);
@@ -52,17 +49,20 @@ private:
         },
         {"disconnected", State::disconnected,
             {{ State::disconnected, std::bind(&Slave::handler_state_disconnected, this) },
-             { State::connecting,   std::bind(&Slave::check_connection_requested, this) }}
+             { State::disconnected, std::bind(&Slave::check_transport_closed, this)     },
+             { State::connecting,   std::bind(&Slave::check_hip_received, this)         }}
         },
         {"connecting", State::connecting,
-            {{ State::connecting,   std::bind(&Slave::handler_state_connecting, this)  },
-             { State::init,         std::bind(&Slave::check_disconnected, this)        },
-             { State::connected,    std::bind(&Slave::check_connected, this)           }}
+            {{ State::connecting,   std::bind(&Slave::handler_state_connecting, this)   },
+             { State::disconnected, std::bind(&Slave::check_transport_closed, this)     },
+             { State::disconnected, std::bind(&Slave::check_ka_timeout, this)           },
+             { State::connected,    std::bind(&Slave::check_connected, this)            }}
         },
         {"connected", State::connected,
-            {{ State::connected,    std::bind(&Slave::handler_state_connected, this)   },
-             { State::init,         std::bind(&Slave::check_disconnected, this)        },
-             { State::connecting,   std::bind(&Slave::check_connection_requested, this)}}
+            {{ State::connected,    std::bind(&Slave::handler_state_connected, this)    },
+             { State::disconnected, std::bind(&Slave::check_transport_closed, this)     },
+             { State::disconnected, std::bind(&Slave::check_ka_timeout, this)           },
+             { State::connecting,   std::bind(&Slave::check_hip_received, this)         }}
         }
     };
 
@@ -72,14 +72,17 @@ private:
     common::transition_status handler_state_connected();
 
     common::transition_status check_true();
-    common::transition_status check_connection_requested();
+    common::transition_status check_hip_received();
     common::transition_status check_connected();
-    common::transition_status check_disconnected();
+    common::transition_status check_ka_timeout();
+    common::transition_status check_transport_closed();
 
-    // flags
-    bool hip_received_ = false;
-    bool ka_received_  = false;
-    std::atomic_bool disconnection_requested_ = true;
+    enum class Event {
+        hip_received,
+        first_ka_received,
+        ka_timeout,
+    };
+    common::EventMngr<Event> evt_mngr_;
 
     common::Statemachine<State>   statemachine_;
     std::unique_ptr<Transport>    transport_;
@@ -95,7 +98,6 @@ private:
     void run() override;
     void set_master_id(const Packet& p);
     void timeout_cb();
-    void transport_error_cb(const std::error_code&);
 };
 
 } /* namespace appli  */

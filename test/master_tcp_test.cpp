@@ -11,30 +11,40 @@ common::Logger logger(spdlog::stderr_color_mt("hdcp"));
 
 static void data_cb(const Packet&)
 {
-    //std::this_thread::sleep_for(std::chrono::milliseconds(1));
 }
 
-static void error_cb(const std::error_code& e)
+static void com_status_cb(appli::Master::State s, const std::error_code& e)
 {
-    log_error(logger, "{}, ({})", e.message(), e.value());
+    switch (s) {
+    case appli::Master::State::init:
+        log_info(logger, "init: {}", e.message());
+        break;
+    case appli::Master::State::disconnected:
+        log_info(logger, "disconnected: {}", e.message());
+        break;
+    case appli::Master::State::connecting:
+        log_info(logger, "connecting: {}", e.message());
+        break;
+    case appli::Master::State::connected:
+        log_info(logger, "connected: {}", e.message());
+        break;
+    }
 }
 
 class Cli: public common::Log, public common::Thread
 {
 public:
-    Cli(common::Logger logger, appli::Master& com): Log(logger), com_(com) {}
+    Cli(common::Logger logger, appli::Master& com): Log(logger), com_(com)
+    {
+        common::Thread::start(0);
+    }
+
     ~Cli()
     {
         com_.stop();
         common::Thread::stop();
         if (joinable())
             join();
-    }
-
-    void start()
-    {
-        com_.start();
-        common::Thread::start(0);
     }
 
 private:
@@ -87,9 +97,11 @@ private:
         std::cout << "test " << com_.master_id() << "\n";
         std::cout << "--------------------------------------------\n";
         std::cout << "Select a command:\n"
-            "  0) connect\n"
-            "  1) disconnect\n"
-            "  2) send command\n"
+            "  0) start\n"
+            "  1) stop\n"
+            "  2) connect\n"
+            "  3) disconnect\n"
+            "  4) send command\n"
             "255) EXIT\n"
             ">> ";
         /* get user input */
@@ -108,18 +120,24 @@ private:
 
         switch (choice) {
         case 0:
-            com_.connect();
+            com_.start();
             break;
         case 1:
-            com_.disconnect();
+            com_.stop();
             break;
         case 2:
-            {
-                std::string cmd_data("test");
-                com_.send_command(0, cmd_data,
-                                  std::bind(&Cli::request_cb, this, std::placeholders::_1));
-                break;
-            }
+            com_.async_connect();
+            break;
+        case 3:
+            com_.async_disconnect();
+            break;
+        case 4:
+        {
+            std::string cmd_data("test");
+            com_.send_command(0, cmd_data,
+                              std::bind(&Cli::request_cb, this, std::placeholders::_1));
+            break;
+        }
         case 255:
             stop();
             break;
@@ -154,11 +172,10 @@ int main(int argc, char* argv[])
     appli::Master com(logger, id,
                   std::make_unique<transport::tcp::Client>(logger, argv[1], argv[2]));
     com.set_data_cb(data_cb);
-    com.set_error_cb(error_cb);
+    com.set_status_cb(com_status_cb);
 
     Cli cli(logger, com);
 
-    cli.start();
     if (cli.joinable())
         cli.join();
 }

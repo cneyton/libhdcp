@@ -6,8 +6,8 @@ namespace hdcp {
 namespace appli {
 
 enum class Errc {
-    timeout = 1,
-    connection_failed,
+    ka_timeout = 1,
+    dip_timeout,
     request_overrun,
     request_not_found,
     invalid_cmd_ack_format,

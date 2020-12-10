@@ -76,8 +76,6 @@ public:
     void open()    override;
     void close()   override;
 
-    void set_eptr(std::exception_ptr eptr) {eptr_ = eptr;};
-
 private:
     using common::Thread::start;
 
@@ -107,9 +105,8 @@ private:
     static void write_cb(libusb_transfer * transfer) noexcept;
     static void read_cb(libusb_transfer * transfer)  noexcept;
 
-    std::exception_ptr eptr_;
-
     void run() override;
+    std::exception_ptr eptr_;
 
     /*
      * we use a different logger for libusb since we need to get his name in

@@ -222,7 +222,7 @@ void Device::write_cb(libusb_transfer * transfer) noexcept
                 log_error(usb->get_logger(), "unknown transfer status, you should not be here");
         }
     } catch (std::exception& e) {
-        usb->set_eptr(std::current_exception());
+        usb->eptr_ = std::current_exception();
     }
 }
 
@@ -242,8 +242,11 @@ void Device::read_cb(libusb_transfer * transfer) noexcept
                 log_trace(usb->get_logger(), "read {} bytes", transfer->actual_length);
 
                 if (!usb->read_queue_.try_enqueue(std::string_view((char*)transfer->buffer,
-                                                                   transfer->actual_length)))
-                    throw transport_error(Errc::read_queue_full);
+                                                                   transfer->actual_length))) {
+                    // discard packet if queue is full
+                    auto e = make_error_code(Errc::read_queue_full);
+                    log_warn(usb->get_logger(), e.message());
+                }
                 break;
             }
             case LIBUSB_TRANSFER_CANCELLED:
@@ -268,35 +271,49 @@ void Device::read_cb(libusb_transfer * transfer) noexcept
                 log_error(usb->get_logger(), "unknown transfer status, you should not be here");
         }
     } catch (std::exception& e) {
-        usb->set_eptr(std::current_exception());
+        usb->eptr_ = std::current_exception();
     }
 }
 
 void Device::run()
 {
-    notify_running(0);
-    while (is_running()) {
-        try {
-            libusb_handle_events(ctx_);
-            if (eptr_)
-                std::rethrow_exception(eptr_);
-        } catch (packet_error& e) {
-            log_warn(logger_, e.what());
-            eptr_ = nullptr;
-        } catch (libusb_error& e) {
-            log_error(logger_, e.what());
-            if (error_cb_)
-                error_cb_(e.code());
-            break;
-        } catch (std::exception& e) {
-            log_error(logger_, e.what());
-            break;
-        }
-    }
     try {
+        rtransfer_curr_->submit();
+        notify_running();
+        while (is_running()) {
+            try {
+                eptr_ = nullptr;
+                libusb_handle_events(ctx_);
+                if (eptr_)
+                    std::rethrow_exception(eptr_);
+            } catch (packet_error& e) {
+                // discard ill-formed packets
+                log_warn(logger_, e.what());
+            } catch (transport_error& e) {
+                if (e.code() == Errc::read_queue_full) {
+                    // discard packet if the queue is full
+                    log_warn(logger_, e.what());
+                } else {
+                    log_error(logger_, e.what());
+                    errc_ = e.code();
+                    break;
+                }
+            } catch (std::exception& e) {
+                log_error(logger_, e.what());
+                errc_ = Errc::other;
+                break;
+            } catch (...) {
+                errc_ = Errc::other;
+                break;
+            }
+        }
         close();
+    } catch (std::exception& e) {
+        log_error(logger_, e.what());
+        errc_ = Errc::other;
     } catch (...) {
-        log_error(logger_, "error while closing device when joining thread");
+        log_error(logger_, "error during thread execution");
+        errc_ = Errc::other;
     }
 }
 
@@ -308,7 +325,6 @@ void Device::stop()
     try {
         cancel_transfers();
         common::Thread::stop();
-        close();
     } catch (libusb_error& e) {
         log_warn(logger_, e.what());
     }
@@ -322,9 +338,7 @@ void Device::start()
     if (is_running())
         return;
     log_debug(logger_, "starting transport...");
-    clear_queues();
     open();
-    rtransfer_curr_->submit();
     common::Thread::start(true);
     log_debug(logger_, "transport started");
 }

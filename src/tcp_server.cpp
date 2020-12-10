@@ -18,27 +18,27 @@ Server::~Server()
     stop();
 }
 
-void Server::stop()
-{
-    if (!is_running())
-        return;
-    log_debug(logger_, "stopping transport...");
-    common::Thread::stop();
-    close();
-    if (joinable())
-        join();
-    log_debug(logger_, "transport stopped");
-}
-
 void Server::start()
 {
     if (is_running())
         return;
     log_debug(logger_, "starting transport...");
-    io_context_.restart();
+    write_in_progress_ = false;
     open();
     common::Thread::start(true);
     log_debug(logger_, "transport started");
+}
+
+void Server::stop()
+{
+    if (!is_running())
+        return;
+    log_debug(logger_, "stopping transport...");
+    close();
+    common::Thread::stop();
+    if (joinable())
+        join();
+    log_debug(logger_, "transport stopped");
 }
 
 void Server::open()
@@ -47,13 +47,14 @@ void Server::open()
         return;
     log_debug(logger_, "opening transport, begin accepting connection...");
     acceptor_.async_accept(socket_,
-        [this](const boost::system::error_code& errc)
+        [this](const boost::system::error_code& ec)
         {
-            if (!errc) {
+            errc_ = ec;
+            if (!ec) {
                 log_debug(logger_, "connection accepted, transport opened");
                 read_header();
             } else {
-                log_debug(logger_, "no connection accepted: {}", errc.message());
+                log_debug(logger_, "accept error: {}", ec.message());
             }
         });
 }
@@ -76,13 +77,13 @@ bool Server::is_open()
 void Server::write(Packet&& p)
 {
     if (!is_open())
-        throw transport_error(TransportErrc::not_permitted);
+        throw transport_error(Errc::write_while_closed);
 
     boost::asio::post(io_context_,
         [this, p] ()
         {
             if (!write_queue_.try_enqueue(p))
-                throw transport_error(TransportErrc::write_queue_full);
+                throw transport_error(Errc::write_queue_full);
             if (!write_in_progress_)
                 do_write();
         });
@@ -90,39 +91,51 @@ void Server::write(Packet&& p)
 
 void Server::run()
 {
-    clear_queues();
-    write_in_progress_ = false;
-    notify_running(0);
-    while (is_running()) {
-        try {
-            io_context_.run();
-            break; // run exited normally
-        } catch (packet_error& e) {
-            log_warn(logger_, e.what());
-        } catch (asio_error& e) {
-            log_error(logger_, e.what());
-            close();
-            if (error_cb_)
-                error_cb_(e.code());
-        } catch (std::exception& e) {
-            log_error(logger_, e.what());
-            close();
+    try {
+        io_context_.restart();
+        notify_running();
+        while (is_running()) {
+            try {
+                io_context_.run();
+                break; // run exited normally
+            } catch (packet_error& e) {
+                log_warn(logger_, e.what());
+            } catch (transport_error& e) {
+                // only read queue full can occur here -> discard packet
+                log_warn(logger_, e.what());
+            } catch (std::exception& e) {
+                log_error(logger_, e.what());
+                close();
+                break;
+            } catch (...) {
+                close();
+                break;
+            }
         }
+    } catch (std::exception& e) {
+        log_error(logger_, e.what());
+    } catch (...) {
+        log_error(logger_, "error during thread execution");
     }
 }
 
 void Server::read_header()
 {
-    if (!is_open())
-        return;
     auto h = read_packet_.header_view();
     boost::asio::async_read(socket_,
                             boost::asio::buffer(const_cast<char*>(h.data()), h.size()),
         [this](const boost::system::error_code& ec, size_t len)
         {
             log_trace(logger_, "read {} bytes", len);
+            errc_ = ec;
             if (!ec) {
                 read_payload();
+            } else if (ec == boost::asio::error::operation_aborted) {
+                log_warn(logger_, "{}", ec.message());
+            } else if (ec == boost::asio::error::eof) {
+                log_info(logger_, "{}", ec.message());
+                close();
+                open();
             } else {
                 throw asio_error(ec);
             }
@@ -131,8 +144,6 @@ void Server::read_header()
 
 void Server::read_payload()
 {
-    if (!is_open())
-        return;
     try {
         read_packet_.parse_header();
     } catch (hdcp::packet_error& e) {
@@ -146,15 +157,23 @@ void Server::read_payload()
         [this](const boost::system::error_code& ec, size_t len)
         {
             log_trace(logger_, "read {} bytes", len);
+            errc_ = ec;
             if (!ec) {
                 try {
                     read_packet_.parse_payload();
                     if (!read_queue_.try_enqueue(read_packet_))
-                        throw transport_error(TransportErrc::read_queue_full);
+                        throw transport_error(Errc::read_queue_full);
                 } catch (std::exception& e) {
                     log_error(logger_, "{}", e.what());
                 }
                 read_header();
+            } else if (ec == boost::asio::error::operation_aborted) {
+                log_warn(logger_, "{}", ec.message());
+            } else if (ec == boost::asio::error::eof) {
+                log_info(logger_, "{}", ec.message());
+                close();
+                errc_ = ec;
+                open();
             } else {
                 throw asio_error(ec);
             }
@@ -171,11 +190,21 @@ void Server::do_write()
         [this](const boost::system::error_code& ec, size_t len)
         {
             log_trace(logger_, "write {} bytes", len);
+            errc_ = ec;
             if (!ec) {
                 if (write_queue_.size_approx() > 0)
                     do_write();
                 else
                     write_in_progress_ = false;
+            } else if (ec == boost::asio::error::operation_aborted) {
+                log_warn(logger_, "{}", ec.message());
+                write_in_progress_ = false;
+            } else if (ec == boost::asio::error::eof) {
+                log_info(logger_, "{}", ec.message());
+                close();
+                errc_ = ec;
+                open();
+                write_in_progress_ = false;
             } else {
                 throw asio_error(ec);
             }

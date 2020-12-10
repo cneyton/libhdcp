@@ -11,6 +11,7 @@ constexpr std::chrono::milliseconds connecting_timeout_(1000);
 constexpr std::chrono::milliseconds command_timeout_(1000);
 constexpr std::chrono::milliseconds keepalive_timeout(3000);
 constexpr std::chrono::milliseconds keepalive_interval(1000);
+constexpr uint max_connection_attempts = 3;
 
 struct Identification
 {
