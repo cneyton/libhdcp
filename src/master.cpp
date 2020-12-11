@@ -90,6 +90,8 @@ void Master::connect()
     evt_mngr_.notify(Event::connection_requested);
     evt_mngr_.wait(Event::connection_attempt);
     evt_mngr_.erase(Event::connection_attempt);
+    if (state() != State::connected)
+        throw application_error(Errc::connection_failed);
 }
 
 common::transition_status Master::handler_state_init()

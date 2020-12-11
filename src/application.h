@@ -31,4 +31,22 @@ struct Identification
     }
 };
 
+/* TODO: add com status class by grouping master & slave states <11-12-20, cneyton> */
+
+//class Status
+//{
+//public:
+    //enum class State {
+        //init,
+        //disconnected,
+        //connecting,
+        //connected
+    //};
+    //State state()                 const {return s_;}
+    //const std::error_code& errc() const {return errc_;}
+//private:
+    //State           s_;
+    //std::error_code errc_;
+//};
+
 } /* namespace hdcp */

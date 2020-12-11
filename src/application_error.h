@@ -13,6 +13,7 @@ enum class Errc {
     invalid_cmd_ack_format,
     data_too_big,
     write_while_disconnected,
+    connection_failed
 };
 
 struct ErrorCategory: public std::error_category

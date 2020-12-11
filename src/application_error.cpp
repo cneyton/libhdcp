@@ -15,6 +15,7 @@ std::string ErrorCategory::message(int e) const
     case Errc::invalid_cmd_ack_format:    return "invalid command ack format";
     case Errc::data_too_big:              return "data too big";
     case Errc::write_while_disconnected:  return "writing is not permitted while disconnected";
+    case Errc::connection_failed:         return "connection failed";
     default:                              return "unknown error code";
     }
 }
