@@ -37,6 +37,7 @@ public:
     void set_status_cb(StatusCallback&& cb) {status_cb_ = std::forward<StatusCallback>(cb);}
     void async_connect();
     void async_disconnect();
+    void connect();
     void send_command(Packet::BlockType id, const std::string& data, Request::Callback cb);
 
 private:
@@ -49,7 +50,6 @@ private:
         },
         {"disconnected", State::disconnected,
             {{ State::disconnected, std::bind(&Master::handler_state_disconnected, this) },
-             { State::disconnected, std::bind(&Master::check_transport_closed, this)     },
              { State::connecting,   std::bind(&Master::check_connection_requested, this) }}
         },
         {"connecting", State::connecting,
@@ -85,7 +85,8 @@ private:
         dip_received,
         dip_timeout,
         ka_timeout,
-        stop
+        stop,
+        connection_attempt
     };
     common::EventMngr<Event> evt_mngr_;
 

@@ -22,6 +22,9 @@ Master::Master(common::Logger logger, const Identification& master_id,
                  status_cb_(c->id, errc_);
             // reset error code once it has been sent
             errc_ = std::error_code();
+            // notify for synchronous connect
+            if (p->id == State::connecting)
+                evt_mngr_.notify(Event::connection_attempt);
         });
 }
 
@@ -77,6 +80,16 @@ void Master::async_disconnect()
         return;
 
     evt_mngr_.notify(Event::disconnection_requested);
+}
+
+void Master::connect()
+{
+    if (state() == State::connected)
+        return;
+
+    evt_mngr_.notify(Event::connection_requested);
+    evt_mngr_.wait(Event::connection_attempt);
+    evt_mngr_.erase(Event::connection_attempt);
 }
 
 common::transition_status Master::handler_state_init()

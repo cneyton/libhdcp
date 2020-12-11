@@ -99,9 +99,10 @@ private:
         std::cout << "Select a command:\n"
             "  0) start\n"
             "  1) stop\n"
-            "  2) connect\n"
-            "  3) disconnect\n"
-            "  4) send command\n"
+            "  2) async connect\n"
+            "  3) async disconnect\n"
+            "  4) connect \n"
+            " 10) send command\n"
             "255) EXIT\n"
             ">> ";
         /* get user input */
@@ -132,6 +133,9 @@ private:
             com_.async_disconnect();
             break;
         case 4:
+            com_.connect();
+            break;
+        case 10:
         {
             std::string cmd_data("test");
             com_.send_command(0, cmd_data,
