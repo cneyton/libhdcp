@@ -325,6 +325,7 @@ void Device::stop()
     try {
         cancel_transfers();
         common::Thread::stop();
+        close();
     } catch (libusb_error& e) {
         log_warn(logger_, e.what());
     }
