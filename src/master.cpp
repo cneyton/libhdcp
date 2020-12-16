@@ -97,6 +97,7 @@ void Master::connect()
 common::transition_status Master::handler_state_init()
 {
     errc_ = std::error_code();
+    evt_mngr_.clear();
     notify_running();
     return common::transition_status::stay_curr_state;
 }
@@ -109,7 +110,6 @@ common::transition_status Master::handler_state_disconnected()
     }
 
     log_debug(logger_, "waiting for event...");
-    evt_mngr_.clear();
     evt_mngr_.wait();
     return common::transition_status::stay_curr_state;
 }
